@@ -269,21 +269,42 @@
             lucide.createIcons();
         }
 
-        function updateAvailableSlots() {
+        async function updateAvailableSlots() {
             if (!clinicConfig) return;
-            const hours = clinicConfig.available_hours || [];
+            const date = document.getElementById('inp-date').value;
+            if (!date) return;
+
             const container = document.getElementById('time-slots');
+            container.innerHTML = `<div class="flex items-center gap-2 text-xs text-blue-500 font-bold py-2"><i data-lucide="loader-2" class="animate-spin" width="14"></i><span>Mengecek slot kosong...</span></div>`;
+            lucide.createIcons();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const alias = urlParams.get('id');
             selectedTime = '';
             document.getElementById('inp-time').value = '';
 
-            if (hours.length === 0) {
-                container.innerHTML = '<p class="text-xs text-slate-400 italic">Tidak ada slot tersedia.</p>';
-                return;
-            }
+            try {
+                // Fetch ULANG info klinik dengan parameter date agar backend bisa filter slot terisi
+                const resp = await fetch(`${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&date=${date}&t=${Date.now()}`);
+                const result = await resp.json();
 
-            container.innerHTML = hours.map(h => `
-                <button type="button" class="time-chip" onclick="selectTime(this, '${h}')">${h}</button>
-            `).join('');
+                if (result.status === 'success') {
+                    const hours = result.available_hours || [];
+                    if (hours.length === 0) {
+                        container.innerHTML = '<p class="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-100 italic">Maaf, semua slot di tanggal ini sudah penuh.</p>';
+                    } else {
+                        container.innerHTML = hours.map(h => `
+                            <button type="button" class="time-chip" onclick="selectTime(this, '${h}')">${h}</button>
+                        `).join('');
+                    }
+                } else {
+                    container.innerHTML = '<p class="text-xs text-red-500 italic">Gagal memuat jam. Coba lagi.</p>';
+                }
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = '<p class="text-xs text-red-500 italic">Error koneksi server.</p>';
+            }
+            lucide.createIcons();
         }
 
         function selectTime(el, time) {

@@ -2134,7 +2134,7 @@ function renderConfigView(container) {
                         <div>
                             <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Jam Tersedia</label>
                             <div class="grid grid-cols-3 gap-2">
-                                ${['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(h => {
+                                ${['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(h => {
         const saved = localStorage.getItem('erm_booking_hours') || '08:00,09:00,10:00,11:00,13:00,14:00,15:00,16:00';
         const checked = saved.split(',').includes(h) ? 'checked' : '';
         return `<label class="flex items-center gap-1.5 text-sm cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg">
