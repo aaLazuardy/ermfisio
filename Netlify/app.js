@@ -37,7 +37,8 @@ let state = {
         sipf: 'SIPF: ....................',
         address: 'Jl. Contoh No.1, Kota, Provinsi',
         phone: '',
-        mapsUrl: ''
+        mapsUrl: '',
+        qrisImage: ''
     },
     notificationConfig: {
         telegramToken: '',
@@ -660,6 +661,7 @@ function navigate(view) {
     }
     state.currentView = view;
     if (view !== 'assessments') state.filterPatientId = null;
+    if (view === 'kasir') state.kasirTab = state.kasirTab || 'antrian';
     renderApp();
 }
 
@@ -725,7 +727,7 @@ function renderApp() {
         printContainer.style.display = 'none'; // Force override to hide
         document.body.style.overflow = 'hidden';
 
-        ['dashboard', 'schedule', 'patients', 'assessments', 'config'].forEach(v => {
+        ['dashboard', 'schedule', 'patients', 'assessments', 'kasir', 'config'].forEach(v => {
             const btn = document.getElementById(`nav-${v}`);
             if (btn) {
                 const isActive = state.currentView === v;
@@ -744,6 +746,7 @@ function renderApp() {
         else if (state.currentView === 'patients') { pageTitle.innerText = 'Data Master Pasien'; renderPatientList(main); }
         else if (state.currentView === 'assessments') { pageTitle.innerText = 'Riwayat Assessment'; renderAssessmentList(main); }
         else if (state.currentView === 'assessment_form') { pageTitle.innerText = 'Formulir Assessment'; renderAssessmentForm(main, false); }
+        else if (state.currentView === 'kasir') { pageTitle.innerText = 'Kasir & Pembayaran'; renderKasirView(main); }
         else if (state.currentView === 'config') { pageTitle.innerText = 'Konfigurasi'; renderConfigView(main); }
 
         renderIcons();
@@ -755,17 +758,28 @@ function renderDashboard(container) {
     const count = state.assessments.length;
     const today = new Date().toISOString().slice(0, 10);
     const todayAppointments = state.appointments.filter(a => a.date === today);
-    const todayIncome = state.assessments.filter(a => a.date === today).reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
+    // Pemasukan dari pembayaran yang sudah PAID hari ini
+    const todayIncome = state.appointments
+        .filter(a => a.paymentStatus === 'PAID' && a.paidAt && a.paidAt.slice(0, 10) === today)
+        .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const unpaidToday = state.appointments.filter(a => a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
 
     container.innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 fade-in">
-            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg"><h3 class="text-4xl font-bold">${state.patients.length}</h3><p class="text-blue-100">Total Pasien</p></div>
-            <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg"><h3 class="text-4xl font-bold">${count}</h3><p class="text-emerald-100">Assessment</p></div>
-            <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg"><h3 class="text-4xl font-bold">${todayAppointments.length}</h3><p class="text-purple-100">Pasien Hari Ini</p></div>
-            <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl p-6 text-white shadow-lg">
+            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+                <h3 class="text-4xl font-bold">${state.patients.length}</h3><p class="text-blue-100">Total Pasien</p>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg">
+                <h3 class="text-4xl font-bold">${count}</h3><p class="text-emerald-100">Assessment</p>
+            </div>
+            <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+                <h3 class="text-4xl font-bold">${todayAppointments.length}</h3><p class="text-purple-100">Pasien Hari Ini</p>
+            </div>
+            <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:opacity-90 transition-opacity" onclick="navigate('kasir')">
                 <h3 class="text-3xl font-bold truncate" title="${formatRp(todayIncome)}">${formatRp(todayIncome)}</h3>
                 <p class="text-orange-100">Pemasukan Hari Ini</p>
+                ${unpaidToday > 0 ? `<div class="mt-2 bg-white/20 rounded-lg px-2 py-1 text-xs font-bold">${unpaidToday} belum bayar →</div>` : '<div class="mt-2 text-xs text-orange-200">Semua lunas ✓</div>'}
             </div>
         </div>
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 fade-in">
@@ -992,6 +1006,9 @@ function openDailyScheduleModal(dateStr) {
                             <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
                                 <span class="${typeColor} px-2 py-0.5 rounded border flex items-center gap-1 font-bold"><i data-lucide="${typeIcon}" width="10"></i> ${ptType}</span>
                                 <span class="bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1"><i data-lucide="user" width="10"></i> ${a.therapistId}</span>
+                                ${a.paymentStatus === 'PAID'
+                ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1 font-bold"><i data-lucide="check-circle" width="10"></i> LUNAS</span>`
+                : (a.status === 'CONFIRMED' ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200 flex items-center gap-1 font-bold"><i data-lucide="alert-circle" width="10"></i> BELUM BAYAR</span>` : '')}
                                 ${a.notes ? `<span class="italic text-slate-400 max-w-[200px] truncate"><i data-lucide="sticky-note" width="10" class="inline mr-1"></i>${a.notes}</span>` : ''}
                             </div>
                         </div>
@@ -2107,6 +2124,29 @@ function renderConfigView(container) {
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo.address}</textarea></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🗺️ Link Google Maps</label><input type="text" id="conf-maps" value="${state.clinicInfo.mapsUrl || ''}" placeholder="https://maps.google.com/..." class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div class="col-span-full mt-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-100">
+                            <h4 class="font-bold text-purple-800 flex items-center gap-2 mb-3"><i data-lucide="qr-code" width="18"></i> Pengaturan QRIS Statis</h4>
+                            <div class="flex flex-col md:flex-row gap-6">
+                                <div class="shrink-0">
+                                    <div id="qris-preview-container" class="w-40 h-40 bg-white rounded-xl border-2 border-dashed border-purple-200 flex items-center justify-center overflow-hidden">
+                                        ${state.clinicInfo.qrisImage
+            ? `<img src="${state.clinicInfo.qrisImage}" class="w-full h-full object-contain">`
+            : `<div class="text-center text-slate-300"><i data-lucide="image" width="32" class="mx-auto mb-1"></i><p class="text-[10px]">Belum ada QR</p></div>`}
+                                    </div>
+                                </div>
+                                <div class="flex-1 space-y-3">
+                                    <p class="text-xs text-slate-600">Upload gambar QRIS statis klinik Anda (format JPG/PNG). Gambar ini akan muncul di modal pembayaran saat metode QRIS dipilih.</p>
+                                    <input type="file" id="conf-qris-file" accept="image/*" onchange="handleQrisUpload(this)" class="hidden">
+                                    <div class="flex gap-2">
+                                        <button onclick="document.getElementById('conf-qris-file').click()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-sm">
+                                            <i data-lucide="upload" width="16"></i> Pilih Gambar
+                                        </button>
+                                        ${state.clinicInfo.qrisImage ? `<button onclick="removeQrisImage()" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors">Hapus</button>` : ''}
+                                    </div>
+                                    <input type="hidden" id="conf-qris-base64" value="${state.clinicInfo.qrisImage || ''}">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan Identitas</button></div>
@@ -2241,11 +2281,35 @@ function saveClinicConfig() {
         sipf: document.getElementById('conf-sipf').value,
         address: document.getElementById('conf-address').value,
         phone: document.getElementById('conf-phone').value,
-        mapsUrl: document.getElementById('conf-maps').value
+        mapsUrl: document.getElementById('conf-maps').value,
+        qrisImage: document.getElementById('conf-qris-base64')?.value || ''
     };
     localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
     applyBranding();
     alert('Identitas Klinik Berhasil Disimpan!');
+}
+
+function handleQrisUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) { alert("Ukuran file terlalu besar! Maksimal 1MB."); return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const base64 = e.target.result;
+        document.getElementById('conf-qris-base64').value = base64;
+        const preview = document.getElementById('qris-preview-container');
+        preview.innerHTML = `<img src="${base64}" class="w-full h-full object-contain">`;
+        lucide.createIcons();
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeQrisImage() {
+    if (!confirm("Hapus gambar QRIS?")) return;
+    document.getElementById('conf-qris-base64').value = '';
+    document.getElementById('qris-preview-container').innerHTML = `<div class="text-center text-slate-300"><i data-lucide="image" width="32" class="mx-auto mb-1"></i><p class="text-[10px]">Belum ada QR</p></div>`;
+    lucide.createIcons();
 }
 
 function updatePdfConfig(key, value) {
@@ -3249,3 +3313,440 @@ licenseInterval = setInterval(() => {
 }, 1000);
 // Initial Call
 setTimeout(updateLicenseCountdown, 2000);
+
+// =============================================================
+// --- MODUL KASIR & PEMBAYARAN ---
+// =============================================================
+
+function renderKasirView(container) {
+    const tab = state.kasirTab || 'antrian';
+    const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+
+    container.innerHTML = `
+        <div class="space-y-6 fade-in pb-24">
+            <!-- Tab Header -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-1 flex gap-1">
+                <button onclick="switchKasirTab('antrian')" id="ktab-antrian"
+                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'antrian' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="clock" width="14" class="inline mr-1"></i> Antrian Hari Ini
+                </button>
+                <button onclick="switchKasirTab('laporan')" id="ktab-laporan"
+                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'laporan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="bar-chart-2" width="14" class="inline mr-1"></i> Laporan Keuangan
+                </button>
+            </div>
+
+            <!-- Tab Content -->
+            <div id="kasir-tab-content">
+                ${tab === 'antrian' ? renderKasirAntrian(formatRp) : renderKasirLaporan(formatRp)}
+            </div>
+        </div>`;
+    renderIcons();
+}
+
+function switchKasirTab(tab) {
+    state.kasirTab = tab;
+    renderKasirView(document.getElementById('main-content'));
+}
+
+function renderKasirAntrian(formatRp) {
+    const today = new Date().toISOString().slice(0, 10);
+    const antrian = state.appointments.filter(a =>
+        a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID'
+    ).sort((a, b) => a.time.localeCompare(b.time));
+
+    const lunas = state.appointments.filter(a =>
+        a.date === today && a.paymentStatus === 'PAID'
+    ).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || ''));
+
+    const totalLunasHariIni = lunas.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+
+    return `
+        <!-- Summary strip -->
+        <div class="grid grid-cols-3 gap-4">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                <p class="text-2xl font-black text-amber-700">${antrian.length}</p>
+                <p class="text-xs font-bold text-amber-600 mt-0.5">Menunggu Bayar</p>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                <p class="text-2xl font-black text-emerald-700">${lunas.length}</p>
+                <p class="text-xs font-bold text-emerald-600 mt-0.5">Sudah Lunas</p>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                <p class="text-lg font-black text-blue-700 truncate">${formatRp(totalLunasHariIni)}</p>
+                <p class="text-xs font-bold text-blue-600 mt-0.5">Pemasukan Hari Ini</p>
+            </div>
+        </div>
+
+        <!-- Antrian Belum Bayar -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="px-6 py-4 border-b border-slate-100">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="clock" width="18" class="text-amber-500"></i>
+                    Antrian Belum Bayar
+                </h3>
+            </div>
+            <div class="divide-y divide-slate-100">
+                ${antrian.length === 0
+            ? `<div class="p-8 text-center text-slate-400">
+                            <i data-lucide="check-circle" width="40" class="mx-auto mb-2 text-emerald-400"></i>
+                            <p class="font-medium">Semua pasien hari ini sudah lunas!</p>
+                       </div>`
+            : antrian.map(a => {
+                const p = state.patients.find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.name || 'Pasien Baru');
+                const terapis = state.users.find(u => u.id === a.therapistId);
+                return `
+                        <div class="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors">
+                            <div class="text-center min-w-[52px]">
+                                <span class="text-lg font-black text-slate-700">${a.time || '-'}</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-slate-800 truncate">${nama}</p>
+                                <p class="text-xs text-slate-400">${terapis ? terapis.name : (a.therapistId || '-')} &bull; ${a.patientType || 'Klinik'}</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <p class="font-bold text-slate-700 text-sm">${formatRp(a.fee)}</p>
+                                <button onclick="openPaymentModal('${a.id}')"
+                                    class="mt-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm">
+                                    Proses Bayar
+                                </button>
+                            </div>
+                        </div>`;
+            }).join('')}
+            </div>
+        </div>
+
+        <!-- Sudah Lunas Hari Ini -->
+        ${lunas.length > 0 ? `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="px-6 py-4 border-b border-slate-100">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="check-circle" width="18" class="text-emerald-500"></i>
+                    Sudah Lunas Hari Ini
+                </h3>
+            </div>
+            <div class="divide-y divide-slate-100">
+                ${lunas.map(a => {
+                const p = state.patients.find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.name || 'Pasien');
+                const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'QRIS': '📱', 'BPJS': '🏥' };
+                return `
+                    <div class="flex items-center gap-4 px-6 py-3 bg-emerald-50/30">
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-slate-700 truncate">${nama}</p>
+                            <p class="text-xs text-slate-400">${a.time || '-'} &bull; ${methodIcons[a.paymentMethod] || ''} ${a.paymentMethod || '-'}</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <p class="font-bold text-emerald-700">${formatRp(a.finalAmount || a.fee)}</p>
+                            <span class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">LUNAS</span>
+                        </div>
+                    </div>`;
+            }).join('')}
+            </div>
+        </div>` : ''}
+    `;
+}
+
+function renderKasirLaporan(formatRp) {
+    // Default range: bulan ini
+    const now = new Date();
+    const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const defaultTo = now.toISOString().slice(0, 10);
+    const savedFrom = state.laporanFrom || defaultFrom;
+    const savedTo = state.laporanTo || defaultTo;
+
+    const filtered = state.appointments.filter(a =>
+        a.paymentStatus === 'PAID' &&
+        a.paidAt && a.paidAt.slice(0, 10) >= savedFrom &&
+        a.paidAt.slice(0, 10) <= savedTo
+    ).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || ''));
+
+    const total = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
+    filtered.forEach(a => {
+        const m = a.paymentMethod || 'Tunai';
+        byMethod[m] = (byMethod[m] || 0) + (Number(a.finalAmount) || Number(a.fee) || 0);
+    });
+
+    // Group by date for per-hari view
+    const byDate = {};
+    filtered.forEach(a => {
+        const d = a.paidAt ? a.paidAt.slice(0, 10) : a.date;
+        if (!byDate[d]) byDate[d] = { count: 0, total: 0 };
+        byDate[d].count++;
+        byDate[d].total += Number(a.finalAmount) || Number(a.fee) || 0;
+    });
+
+    return `
+        <!-- Filter -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+            <div class="flex flex-wrap items-end gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dari Tanggal</label>
+                    <input type="date" id="laporan-from" value="${savedFrom}"
+                        class="border-2 border-slate-200 rounded-xl px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Sampai Tanggal</label>
+                    <input type="date" id="laporan-to" value="${savedTo}"
+                        class="border-2 border-slate-200 rounded-xl px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+                <button onclick="applyLaporanFilter()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md">
+                    Tampilkan
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white shadow-lg">
+                <p class="text-blue-200 text-xs font-bold uppercase">Total Pemasukan</p>
+                <p class="text-2xl font-black mt-1 truncate">${formatRp(total)}</p>
+                <p class="text-blue-200 text-xs mt-1">${filtered.length} transaksi</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                <p class="text-lg font-black text-slate-700">💵</p>
+                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.Tunai)}</p>
+                <p class="text-xs text-slate-400">Tunai</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                <p class="text-lg font-black text-slate-700">🏦</p>
+                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.Transfer)}</p>
+                <p class="text-xs text-slate-400">Transfer</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                <p class="text-lg font-black text-slate-700">📱</p>
+                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.QRIS)}</p>
+                <p class="text-xs text-slate-400">QRIS</p>
+            </div>
+        </div>
+
+        <!-- Per Hari -->
+        ${Object.keys(byDate).length > 0 ? `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800">Ringkasan Per Hari</h3>
+            </div>
+            <div class="divide-y divide-slate-100">
+                ${Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a)).map(([date, info]) => {
+        const d = new Date(date + 'T00:00:00');
+        const label = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        return `
+                    <div class="flex items-center justify-between px-6 py-3 hover:bg-slate-50">
+                        <div>
+                            <p class="font-semibold text-slate-700 text-sm">${label}</p>
+                            <p class="text-xs text-slate-400">${info.count} transaksi</p>
+                        </div>
+                        <p class="font-bold text-slate-800">${formatRp(info.total)}</p>
+                    </div>`;
+    }).join('')}
+            </div>
+        </div>` : ''}
+
+        <!-- Tabel Detail -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
+            <div class="px-6 py-4 border-b border-slate-100">
+                <h3 class="font-bold text-slate-800">Detail Transaksi</h3>
+            </div>
+            ${filtered.length === 0
+            ? `<div class="p-8 text-center text-slate-400">
+                        <i data-lucide="search-x" width="36" class="mx-auto mb-2"></i>
+                        <p>Tidak ada transaksi di rentang ini</p>
+                   </div>`
+            : `<div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Tgl Bayar</th>
+                                <th class="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Pasien</th>
+                                <th class="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase hidden md:table-cell">Terapis</th>
+                                <th class="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Metode</th>
+                                <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            ${filtered.map(a => {
+                const p = state.patients.find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.name || 'Pasien');
+                const terapis = state.users.find(u => u.id === a.therapistId);
+                const paidDate = a.paidAt ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'QRIS': 'bg-purple-100 text-purple-700', 'BPJS': 'bg-teal-100 text-teal-700' };
+                const mc = methodColors[a.paymentMethod] || 'bg-slate-100 text-slate-600';
+                return `
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-4 py-3 text-slate-500 text-xs">${paidDate}</td>
+                                    <td class="px-4 py-3 font-medium text-slate-800">${nama}</td>
+                                    <td class="px-4 py-3 text-slate-500 hidden md:table-cell">${terapis ? terapis.name : '-'}</td>
+                                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-bold ${mc}">${a.paymentMethod || '-'}</span></td>
+                                    <td class="px-4 py-3 text-right font-bold text-slate-800">${formatRp(a.finalAmount || a.fee)}</td>
+                                </tr>`;
+            }).join('')}
+                        </tbody>
+                    </table>
+                   </div>`}
+        </div>
+    `;
+}
+
+function applyLaporanFilter() {
+    const from = document.getElementById('laporan-from')?.value;
+    const to = document.getElementById('laporan-to')?.value;
+    if (from) state.laporanFrom = from;
+    if (to) state.laporanTo = to;
+    renderKasirView(document.getElementById('main-content'));
+}
+
+// --- Modal Pembayaran ---
+function openPaymentModal(apptId) {
+    const a = state.appointments.find(x => x.id === apptId);
+    if (!a) return;
+    const p = state.patients.find(pt => pt.id === a.patientId);
+    const nama = p ? p.name : (a.name || 'Pasien');
+    const feeBase = Number(a.fee) || 0;
+    const qrisImg = state.clinicInfo.qrisImage || '';
+    const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+
+    const modal = document.getElementById('modal-container');
+    const content = document.getElementById('modal-content');
+    modal.classList.remove('hidden');
+
+    content.innerHTML = `
+        <div class="bg-white px-6 py-4 border-b flex justify-between items-center sticky top-0 z-20">
+            <div>
+                <h3 class="text-xl font-bold text-slate-800">Proses Pembayaran</h3>
+                <p class="text-sm text-slate-500">${nama} &bull; ${a.time || ''} &bull; ${a.date}</p>
+            </div>
+            <button onclick="closeModal()" class="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors">
+                <i data-lucide="x" width="20"></i>
+            </button>
+        </div>
+        <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+            <!-- Rincian -->
+            <div class="bg-slate-50 rounded-xl p-4 space-y-2">
+                <div class="flex justify-between text-sm"><span class="text-slate-500">Biaya Sesi</span><span class="font-bold">${formatRp(feeBase)}</span></div>
+                <div class="flex justify-between text-sm items-center">
+                    <span class="text-slate-500">Diskon (Rp)</span>
+                    <input type="number" id="pm-discount" value="0" min="0" max="${feeBase}"
+                        oninput="updatePaymentTotal(${feeBase})"
+                        class="w-32 text-right border-2 border-slate-200 rounded-lg px-2 py-1 text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div class="border-t border-slate-200 pt-2 flex justify-between font-bold text-base">
+                    <span>TOTAL BAYAR</span>
+                    <span id="pm-total" class="text-blue-600">${formatRp(feeBase)}</span>
+                </div>
+            </div>
+
+            <!-- Pilih Metode -->
+            <div>
+                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Metode Pembayaran</p>
+                <div class="grid grid-cols-4 gap-2" id="pm-method-group">
+                    ${['Tunai', 'Transfer', 'QRIS', 'BPJS'].map(m => `
+                    <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
+                        class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
+                        ${m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}<br>${m}
+                    </button>`).join('')}
+                </div>
+            </div>
+
+            <!-- QRIS Panel (hidden by default) -->
+            <div id="pm-qris-panel" class="hidden bg-purple-50 border-2 border-purple-200 rounded-2xl p-5 text-center">
+                ${qrisImg
+            ? `<img src="${qrisImg}" alt="QR Code Klinik" class="w-48 h-48 object-contain mx-auto rounded-xl border border-slate-200 bg-white p-2">`
+            : `<div class="w-48 h-48 mx-auto bg-white rounded-xl border-2 border-dashed border-purple-300 flex items-center justify-center text-slate-400 text-sm">
+                            <div class="text-center"><i data-lucide="qr-code" width="48" class="mx-auto mb-2 text-purple-300"></i><p>QR belum diupload</p><p class="text-xs">Upload di menu Konfigurasi</p></div>
+                       </div>`}
+                <p class="text-purple-700 font-bold mt-3 text-sm">Scan QR, lalu transfer nominal:</p>
+                <p class="text-2xl font-black text-purple-800" id="pm-qris-nominal">${formatRp(feeBase)}</p>
+                <p class="text-xs text-purple-500 mt-1">Konfirmasi setelah pasien transfer</p>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t bg-slate-50 sticky bottom-0">
+            <button onclick="confirmPayment('${apptId}')"
+                id="pm-confirm-btn"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl text-base transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+                <i data-lucide="check-circle" width="20" class="inline mr-2"></i> Konfirmasi Lunas
+            </button>
+            <p class="text-xs text-slate-400 text-center mt-2">Pilih metode pembayaran terlebih dahulu</p>
+        </div>`;
+
+    renderIcons();
+}
+
+function selectPaymentMethod(method) {
+    state._selectedPaymentMethod = method;
+    // Update button styles
+    ['Tunai', 'Transfer', 'QRIS', 'BPJS'].forEach(m => {
+        const btn = document.getElementById(`pm-${m}`);
+        if (!btn) return;
+        btn.className = m === method
+            ? 'py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-blue-600 bg-blue-50 text-blue-700'
+            : 'py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400';
+    });
+    // Show/hide QRIS panel
+    const qrisPanel = document.getElementById('pm-qris-panel');
+    if (qrisPanel) qrisPanel.classList.toggle('hidden', method !== 'QRIS');
+    // Enable confirm button
+    const btn = document.getElementById('pm-confirm-btn');
+    if (btn) {
+        btn.disabled = false;
+        const next = btn.nextElementSibling;
+        if (next) next.textContent = `Bayar via ${method}`;
+    }
+}
+
+function updatePaymentTotal(feeBase) {
+    const disc = Number(document.getElementById('pm-discount')?.value) || 0;
+    const total = Math.max(0, feeBase - disc);
+    const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+    const totalEl = document.getElementById('pm-total');
+    const qrisNominal = document.getElementById('pm-qris-nominal');
+    if (totalEl) totalEl.textContent = formatRp(total);
+    if (qrisNominal) qrisNominal.textContent = formatRp(total);
+}
+
+function confirmPayment(apptId) {
+    const method = state._selectedPaymentMethod;
+    if (!method) { alert('Pilih metode pembayaran dulu!'); return; }
+    const discount = Number(document.getElementById('pm-discount')?.value) || 0;
+    const idx = state.appointments.findIndex(a => a.id === apptId);
+    if (idx === -1) return;
+    const appt = state.appointments[idx];
+    const feeBase = Number(appt.fee) || 0;
+    appt.paymentStatus = 'PAID';
+    appt.paymentMethod = method;
+    appt.discount = discount;
+    appt.finalAmount = Math.max(0, feeBase - discount);
+    appt.paidAt = new Date().toISOString();
+    appt.updatedAt = new Date().toISOString();
+    saveData();
+    // Auto-sync ke Google Sheet
+    if (state.scriptUrl) autoSyncPayment(appt);
+    delete state._selectedPaymentMethod;
+    closeModal();
+    // Kembali ke antrian & re-render
+    state.kasirTab = 'antrian';
+    renderKasirView(document.getElementById('main-content'));
+}
+
+async function autoSyncPayment(appt) {
+    const sheetId = getSheetIdFromUrl(state.scriptUrl);
+    if (!sheetId) return;
+    try {
+        await fetch(LICENSE_API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'sync_incremental',
+                sheet_id: sheetId,
+                appointments: [appt]
+            })
+        });
+        console.log('Payment synced to Google Sheet:', appt.id);
+    } catch (e) {
+        console.warn('Auto-sync payment failed (will sync on next manual push):', e);
+    }
+}

@@ -20,7 +20,7 @@ const SHEET_NAMES = {
 const HEADERS = {
     PATIENTS: ['id', 'name', 'category', 'gender', 'dob', 'phone', 'job', 'address', 'diagnosis', 'quota', 'defaultFee', 'updatedAt'],
     ASSESSMENTS: ['id', 'patientId', 'date', 'diagnosis', 'icd', 'icf_codes', 'custom_assessment', 'vas', 'fee', 'b', 's', 'd_act', 'd_part', 'obj', 'intervention', 'eval', 'plan', 'templateDefaults', 'bodyChart', 'pain_points', 'updatedAt'],
-    APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'updatedAt'],
+    APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'paymentStatus', 'paymentMethod', 'discount', 'finalAmount', 'paidAt', 'updatedAt'],
     CONFIG: ['key', 'value', 'updated_at'],
     LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours']
 };
