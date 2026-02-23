@@ -778,7 +778,7 @@ function renderDashboard(container) {
     const todayIncome = (state.appointments || [])
         .filter(a => a.paymentStatus && a.paymentStatus.toUpperCase() === 'PAID' && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today)
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
-    const unpaidToday = (state.appointments || []).filter(a => a.date === today && a.status === 'CONFIRMED' && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
+    const unpaidToday = (state.appointments || []).filter(a => a.date === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
 
     container.innerHTML = `
@@ -3368,7 +3368,7 @@ function switchKasirTab(tab) {
 function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
     const antrian = (state.appointments || []).filter(a =>
-        a.date === today && a.status === 'CONFIRMED' && (a.paymentStatus || '').toUpperCase() !== 'PAID'
+        a.date === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID'
     ).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
     const lunas = (state.appointments || []).filter(a =>
@@ -3622,11 +3622,13 @@ function applyLaporanFilter() {
 
 // --- Modal Pembayaran ---
 function openPaymentModal(apptId) {
-    const a = state.appointments.find(x => x.id === apptId);
+    const a = (state.appointments || []).find(x => x.id === apptId);
     if (!a) return;
-    const p = state.patients.find(pt => pt.id === a.patientId);
-    const nama = p ? p.name : (a.name || 'Pasien');
-    const feeBase = Number(a.fee) || 0;
+    const p = (state.patients || []).find(pt => pt.id === a.patientId);
+    const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien Baru');
+
+    // Ambil fee dari appointment, jika kosong ambil defaultFee dari pasien
+    const feeBase = Number(a.fee) || (p ? Number(p.defaultFee) : 0) || 0;
     const qrisImg = state.clinicInfo.qrisImage || '';
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
