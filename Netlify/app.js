@@ -2066,7 +2066,7 @@ function toggleDobMode(mode) {
 function renderConfigView(container) {
     const conf = state.pdfConfig || {};
     container.innerHTML = `
-    <div class="fade-in pb-20">
+    <div class="fade-in pb-32">
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
             <div class="p-6 border-b border-slate-100"><h2 class="text-2xl font-black text-slate-800">Konfigurasi Sistem</h2><p class="text-slate-500 text-sm">Atur identitas klinik dan tampilan hasil cetak.</p></div>
             <div class="flex bg-slate-50 overflow-x-auto">
@@ -2145,7 +2145,7 @@ function renderConfigView(container) {
                             </div>
                         </div>
 
-                        <button onclick="saveBookingConfig()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg btn-press flex items-center gap-2">
+                        <button onclick="saveBookingConfig()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg btn-press flex items-center justify-center gap-2">
                             <i data-lucide="save" width="16"></i> Simpan & Generate Link
                         </button>
                     </div>
@@ -2212,7 +2212,7 @@ function renderConfigView(container) {
                         </div>
                     </div>
                 </div>
-                <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" id="btn-save-clinic" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan & Sinkron Cloud</button></div>
+                <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" id="btn-save-clinic" class="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center justify-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan & Sinkron Cloud</button></div>
             </div>
         </div>
 
@@ -2296,7 +2296,7 @@ function renderConfigView(container) {
                 </div>
 
                 <div class="mt-8 pt-4 border-t border-slate-100 text-right">
-                    <button onclick="saveNotificationConfig()" class="bg-slate-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-slate-900 shadow-lg btn-press flex items-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan Konfigurasi</button>
+                    <button onclick="saveNotificationConfig()" class="w-full md:w-auto bg-slate-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-slate-900 shadow-lg btn-press flex items-center justify-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan Konfigurasi</button>
                 </div>
             </div>
         </div>
