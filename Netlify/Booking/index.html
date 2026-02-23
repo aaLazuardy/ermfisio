@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Online</title>
+    <meta name="description" content="Reservasi jadwal fisioterapi online - mudah, cepat, dan terpercaya.">
+    <meta name="theme-color" content="#2563eb">
+
+    <script src="config.js"></script> <!-- Berisi LICENSE_API_URL -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 12px 14px;
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            outline: none;
+            transition: all 0.2s;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+        }
+
+        .input-field:focus {
+            border-color: #3b82f6;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .time-chip {
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1.5px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: white;
+            color: #475569;
+        }
+
+        .time-chip:hover {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background: #eff6ff;
+        }
+
+        .time-chip.selected {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .time-chip.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: #f1f5f9;
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-100 flex flex-col items-center justify-center p-4">
+
+    <!-- LOADING STATE -->
+    <div id="loading-state" class="text-center fade-in">
+        <div class="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+        <p class="text-slate-500 font-medium">Memuat informasi klinik...</p>
+    </div>
+
+    <!-- ERROR STATE (Hidden) -->
+    <div id="error-state" class="hidden w-full max-w-sm">
+        <div class="bg-white rounded-3xl shadow-xl p-10 text-center border border-red-100 fade-in">
+            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="alert-triangle" width="32"></i>
+            </div>
+            <h3 class="font-black text-slate-800 text-lg mb-2">Klinik Tidak Ditemukan</h3>
+            <p id="error-message" class="text-sm text-slate-500">Link booking tidak valid. Hubungi pihak klinik untuk
+                link terbaru.</p>
+        </div>
+    </div>
+
+    <!-- BOOKING CARD (Hidden until loaded) -->
+    <div id="booking-card" class="hidden w-full max-w-md fade-in">
+        <!-- HEADER -->
+        <div id="clinic-header"
+            class="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-7 text-center mb-4 shadow-xl shadow-blue-200 relative overflow-hidden">
+            <div class="absolute inset-0 opacity-10"
+                style="background-image: radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px); background-size: 30px 30px;">
+            </div>
+            <div class="relative z-10">
+                <div
+                    class="w-14 h-14 bg-white/20 rounded-2xl mx-auto mb-3 flex items-center justify-center border border-white/30">
+                    <i data-lucide="calendar-heart" width="28" class="text-white"></i>
+                </div>
+                <h1 id="clinic-name-display" class="text-2xl font-black text-white mb-1">Loading...</h1>
+                <p class="text-blue-100 text-sm font-medium">Booking Jadwal Fisioterapi Online</p>
+            </div>
+        </div>
+
+        <!-- FORM CARD -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+            <form id="booking-form" onsubmit="submitBooking(event)" class="p-6 space-y-5">
+
+                <!-- Nama -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Nama
+                        Lengkap</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="absolute left-3.5 top-3.5 text-slate-400" width="16"></i>
+                        <input type="text" id="inp-name" required placeholder="Masukkan nama lengkap Anda"
+                            class="input-field pl-9">
+                    </div>
+                </div>
+
+                <!-- WA -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Nomor
+                        WhatsApp</label>
+                    <div class="relative">
+                        <i data-lucide="smartphone" class="absolute left-3.5 top-3.5 text-slate-400" width="16"></i>
+                        <input type="tel" id="inp-contact" required placeholder="08xxxxxxxxxx" class="input-field pl-9">
+                    </div>
+                </div>
+
+                <!-- Tanggal -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Pilih
+                        Tanggal</label>
+                    <div class="relative">
+                        <i data-lucide="calendar" class="absolute left-3.5 top-3.5 text-slate-400" width="16"></i>
+                        <input type="date" id="inp-date" required onchange="updateAvailableSlots()"
+                            class="input-field pl-9">
+                    </div>
+                </div>
+
+                <!-- Jam (Dynamic) -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Pilih Jam</label>
+                    <div id="time-slots" class="flex flex-wrap gap-2">
+                        <p class="text-xs text-slate-400 italic">Pilih tanggal terlebih dahulu...</p>
+                    </div>
+                    <input type="hidden" id="inp-time" required>
+                </div>
+
+                <!-- Keluhan -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Keluhan Singkat
+                        <span class="text-slate-300 normal-case font-normal">(Opsional)</span></label>
+                    <textarea id="inp-complaint" rows="3" placeholder="Contoh: Nyeri pinggang setelah duduk lama..."
+                        class="input-field resize-none"></textarea>
+                </div>
+
+                <button type="submit" id="btn-submit"
+                    class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="send" width="18"></i>
+                    <span>Kirim Permintaan Booking</span>
+                </button>
+
+                <p class="text-center text-xs text-slate-400 leading-relaxed">
+                    Dengan mengirim form ini, Anda setuju untuk dihubungi Admin via WhatsApp untuk konfirmasi jadwal.
+                </p>
+            </form>
+
+            <!-- SUCCESS STATE -->
+            <div id="success-state" class="hidden p-10 text-center">
+                <div
+                    class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-5 animate-bounce">
+                    <i data-lucide="check-circle" width="40"></i>
+                </div>
+                <h2 class="text-2xl font-black text-slate-800 mb-2">Berhasil Terkirim!</h2>
+                <p class="text-slate-500 mb-6 text-sm max-w-xs mx-auto">Permintaan Anda sudah kami terima. Admin akan
+                    menghubungi via WhatsApp untuk konfirmasi.</p>
+                <button onclick="location.reload()"
+                    class="bg-slate-100 text-slate-600 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">
+                    Booking Lagi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === CONFIG ===
+        // URL GAS Script (Same as main app)
+        const GAS_API_URL = typeof LICENSE_API_URL !== 'undefined' ? LICENSE_API_URL : '';
+
+        // === STATE ===
+        let clinicConfig = null; // { clinic_name, sheet_id, available_hours: [] }
+        let selectedTime = '';
+
+        // === INIT ===
+        document.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+
+            // Set min date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('inp-date').setAttribute('min', today);
+
+            // Get alias from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const alias = urlParams.get('id');
+
+            if (!alias) {
+                showError('URL tidak valid. Gunakan format: <b>booking/?id=nama-klinik</b>');
+                return;
+            }
+
+            if (!GAS_API_URL) {
+                showError('Konfigurasi sistem belum lengkap. Hubungi admin.');
+                return;
+            }
+
+            // Fetch clinic info
+            try {
+                const resp = await fetch(`${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&t=${Date.now()}`);
+                const result = await resp.json();
+
+                if (result.status === 'success') {
+                    clinicConfig = result;
+                    document.getElementById('clinic-name-display').innerText = result.clinic_name || 'Klinik Fisioterapi';
+                    document.title = 'Booking - ' + (result.clinic_name || 'Klinik');
+                    showBookingCard();
+                } else {
+                    showError(result.message || 'Klinik tidak ditemukan.');
+                }
+            } catch (err) {
+                console.error(err);
+                showError('Gagal menghubungi server. Periksa koneksi internet.');
+            }
+        });
+
+        function showBookingCard() {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('booking-card').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function showError(msg) {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('error-message').innerHTML = msg;
+            document.getElementById('error-state').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function updateAvailableSlots() {
+            if (!clinicConfig) return;
+            const hours = clinicConfig.available_hours || [];
+            const container = document.getElementById('time-slots');
+            selectedTime = '';
+            document.getElementById('inp-time').value = '';
+
+            if (hours.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-400 italic">Tidak ada slot tersedia.</p>';
+                return;
+            }
+
+            container.innerHTML = hours.map(h => `
+                <button type="button" class="time-chip" onclick="selectTime(this, '${h}')">${h}</button>
+            `).join('');
+        }
+
+        function selectTime(el, time) {
+            document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedTime = time;
+            document.getElementById('inp-time').value = time;
+        }
+
+        async function submitBooking(e) {
+            e.preventDefault();
+
+            if (!selectedTime) {
+                alert('Pilih jam terlebih dahulu!');
+                return;
+            }
+
+            if (!clinicConfig || !clinicConfig.sheet_id) {
+                alert('Konfigurasi klinik tidak lengkap.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-submit');
+            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" width="18"></i><span>Memproses...</span>';
+            btn.disabled = true;
+            lucide.createIcons();
+
+            const payload = {
+                action: 'book_appointment',
+                sheet_id: clinicConfig.sheet_id,
+                name: document.getElementById('inp-name').value.trim(),
+                contact: document.getElementById('inp-contact').value.trim(),
+                date: document.getElementById('inp-date').value,
+                time: selectedTime,
+                complaint: document.getElementById('inp-complaint').value.trim()
+            };
+
+            try {
+                await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                // Show success (no-cors = can't read response, assume success)
+                document.getElementById('booking-form').classList.add('hidden');
+                document.getElementById('success-state').classList.remove('hidden');
+                lucide.createIcons();
+
+            } catch (error) {
+                console.error(error);
+                alert('Gagal mengirim. Mohon cek koneksi internet dan coba lagi.');
+                btn.innerHTML = '<i data-lucide="send" width="18"></i><span>Kirim Permintaan Booking</span>';
+                btn.disabled = false;
+                lucide.createIcons();
+            }
+        }
+    </script>
+</body>
+
+</html>

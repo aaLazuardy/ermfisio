@@ -1,0 +1,401 @@
+/**
+ * ERM FISIOTA BACKEND - V5.0 (MODULAR)
+ * FILE: 1_Main.gs
+ * Deskrpsi: Konfigurasi Dasar, Menu Admin, dan API Handler (doGet, doPost).
+ */
+
+// --- 1. KONFIGURASI DASAR ---
+const SHEET_ID = ""; // IKLASKAN KOSONG
+const TIMEZONE = "Asia/Jakarta";
+const NETLIFY_URL = "https://appfisio.netlify.app"; // Ganti dengan URL produksi jika sudah live
+
+const SHEET_NAMES = {
+    PATIENTS: "Patients",
+    ASSESSMENTS: "Assessments",
+    APPOINTMENTS: "Appointments",
+    CONFIG: "Config",
+    LICENSES: "Licenses"
+};
+
+const HEADERS = {
+    PATIENTS: ['id', 'name', 'category', 'gender', 'dob', 'phone', 'job', 'address', 'diagnosis', 'quota', 'defaultFee', 'updatedAt'],
+    ASSESSMENTS: ['id', 'patientId', 'date', 'diagnosis', 'icd', 'icf_codes', 'custom_assessment', 'vas', 'fee', 'b', 's', 'd_act', 'd_part', 'obj', 'intervention', 'eval', 'plan', 'templateDefaults', 'bodyChart', 'pain_points', 'updatedAt'],
+    APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'updatedAt'],
+    CONFIG: ['key', 'value', 'updated_at'],
+    LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours']
+};
+
+// --- 2. MENU & SIDEBAR ---
+
+function onOpen() {
+    SpreadsheetApp.getUi()
+        .createMenu('FISIOTA Admin')
+        .addItem('🔐 Open License Manager', 'showLicenseSidebar')
+        .addSeparator()
+        .addItem('🛠️ Update ALL Client Databases', 'updateAllConnectedClients')
+        .addToUi();
+}
+
+function showLicenseSidebar() {
+    const html = HtmlService.createHtmlOutput(getSidebarHtml())
+        .setTitle('License Manager')
+        .setWidth(300);
+    SpreadsheetApp.getUi().showSidebar(html);
+}
+
+// --- 3. WEB APP HANDLERS (API) ---
+
+function doGet(e) {
+    const action = e.parameter.action || "pull";
+
+    // --- BRIDGE LOGIC ---
+    // If sheet_id is provided, use it. Otherwise use default.
+    if (e.parameter.sheet_id) TARGET_SHEET_ID = e.parameter.sheet_id;
+    // --------------------
+
+    const ss = getSpreadsheet();
+
+    // ACTION: CHECK LICENSE (GET Method - CORS Friendly)
+    if (action === "check_license") {
+        const key = e.parameter.key;
+        const result = verifyLicense(ss, key, TARGET_SHEET_ID); // Pass TARGET_SHEET_ID
+        return createJSONOutput(result);
+    }
+
+    // ACTION: GET CLINIC INFO BY ALIAS (For Booking Page)
+    if (action === "get_clinic_info") {
+        const alias = e.parameter.alias;
+        if (!alias) return createJSONOutput({ status: 'error', message: 'Alias kosong' });
+        const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+        if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
+        
+        const data = sheet.getDataRange().getValues();
+        if (data.length < 2) return createJSONOutput({ status: 'error', message: 'Data lisensi kosong.' });
+        
+        // Dynamic header lookup - find column index by header name (case-insensitive)
+        const headers = data[0].map(h => String(h).toLowerCase().trim());
+        const colAlias = headers.indexOf('alias');
+        const colStatus = headers.indexOf('status');
+        const colName = headers.indexOf('client_name');
+        const colSheetId = headers.indexOf('sheet id') !== -1 ? headers.indexOf('sheet id') : headers.indexOf('sheet_id');
+        const colHours = headers.indexOf('available_hours');
+        
+        if (colAlias === -1) return createJSONOutput({ status: 'error', message: 'Kolom Alias tidak ditemukan di tab Licenses.' });
+        
+        const row = data.find((r, i) => i > 0 && r[colAlias] && String(r[colAlias]).toLowerCase().trim() === String(alias).toLowerCase().trim() && String(r[colStatus]).trim() === 'ACTIVE');
+        if (row) {
+            const hours = colHours !== -1 && row[colHours] ? String(row[colHours]).split(',').map(h => h.trim()) : ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
+            return createJSONOutput({
+                status: 'success',
+                clinic_name: colName !== -1 ? row[colName] : 'Klinik',
+                sheet_id: colSheetId !== -1 ? row[colSheetId] : '',
+                available_hours: hours
+            });
+        } else {
+            return createJSONOutput({ status: 'error', message: 'Klinik tidak ditemukan atau lisensi tidak aktif.' });
+        }
+    }
+
+    if (action === "pull") {
+        return createJSONOutput({
+            patients: getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
+            assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
+            appointments: getDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS),
+            config: getDataFromSheet(ss, SHEET_NAMES.CONFIG)
+        });
+    }
+
+    // ACTION: AUTO-UPDATE COLUMNS (Triggered manually or via easy link)
+    if (action === "update_database") {
+        const logs = checkAndFixColumns(ss);
+        return createJSONOutput({ status: "success", message: "Database Structure Updated", logs: logs });
+    }
+
+    return createJSONOutput({ status: "ready", message: "FISIOTA Backend V5.0 Ready" });
+}
+
+function updateAllConnectedClients() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+    
+    // 1. Ambil daftar semua Sheet ID dari tab Licenses
+    const licenseSheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+    if (!licenseSheet) {
+        ui.alert("Error", "Tab 'Licenses' tidak ditemukan!", ui.ButtonSet.OK);
+        return;
+    }
+
+    const data = licenseSheet.getDataRange().getValues();
+    // Headers: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id']
+    // Index: 6 is sheet_id (Kolom G)
+    
+    // Skip Header (Row 1)
+    const clients = data.slice(1).filter(row => row[6] && row[6].length > 10); // Simple validation len > 10
+
+    if (clients.length === 0) {
+        ui.alert("Info", "Tidak ada klien yang terdaftar dengan Sheet ID valid.", ui.ButtonSet.OK);
+        return;
+    }
+
+    let summary = [];
+    let successCount = 0;
+    
+    // 2. Loop update setiap sheet klien
+    clients.forEach(row => {
+        const clientName = row[2];
+        const sheetId = row[6];
+        
+        try {
+            const clientSS = SpreadsheetApp.openById(sheetId);
+            const logs = checkAndFixColumns(clientSS);
+            
+            if (logs.some(l => l.includes("Added columns"))) {
+                summary.push(`✅ ${clientName}: Updated`);
+            } else {
+                summary.push(`OK ${clientName}: No changes`);
+            }
+            successCount++;
+        } catch (e) {
+            summary.push(`❌ ${clientName}: Gagal (${e.message})`);
+        }
+    });
+
+    // 3. Update juga Master Sheet (tempat script ini berada)
+    checkAndFixColumns(ss);
+    summary.push(`🤖 Master Admin: Checked`);
+
+    ui.alert(`Update Selesai (${successCount}/${clients.length})`, summary.join("\n"), ui.ButtonSet.OK);
+}
+
+function doPost(e) {
+    const lock = LockService.getScriptLock();
+    if (lock.tryLock(10000)) {
+        try {
+            let data;
+            try { data = JSON.parse(e.postData.contents); } catch (err) { return createJSONOutput({ status: "error", message: "Invalid JSON" }); }
+
+            // --- BRIDGE LOGIC ---
+            // If sheet_id is provided in BODY or PARAM, use it.
+            // Note: e.parameter is from URL, data is from Body.
+            if (e.parameter.sheet_id) TARGET_SHEET_ID = e.parameter.sheet_id;
+            else if (data.sheet_id) TARGET_SHEET_ID = data.sheet_id;
+
+            Logger.log(`[doPost] Action: ${data.action} | SheetID Param: ${e.parameter.sheet_id} | SheetID Body: ${data.sheet_id} | FINAL TARGET: ${TARGET_SHEET_ID}`);
+            // --------------------
+
+            const ss = getSpreadsheet();
+            Logger.log(`[doPost] Opened Spreadsheet ID: ${ss.getId()}`);
+
+            // === ACTION: CHECK LICENSE ===
+            if (data.action === 'check_license') {
+                const result = verifyLicense(ss, data.key, TARGET_SHEET_ID); // Pass TARGET_SHEET_ID
+                return createJSONOutput(result);
+            }
+
+            // ACTION: SAVE CONFIG
+            if (data.action === 'save_config') {
+                if (data.config) updateConfigSheet(ss, data.config);
+                return createJSONOutput({ status: "success" });
+            }
+
+            // ACTION: PUSH DATA (FULL OVERWRITE)
+            if (data.action === "push") {
+                if (data.patients) saveDataFixed(ss, SHEET_NAMES.PATIENTS, data.patients, HEADERS.PATIENTS);
+                if (data.assessments) saveDataFixed(ss, SHEET_NAMES.ASSESSMENTS, data.assessments, HEADERS.ASSESSMENTS);
+                if (data.appointments) saveDataFixed(ss, SHEET_NAMES.APPOINTMENTS, data.appointments, HEADERS.APPOINTMENTS);
+                if (data.config) updateConfigSheet(ss, data.config);
+                return createJSONOutput({ status: "success" });
+            }
+
+            // ACTION: SMART SYNC (INCREMENTAL)
+            if (data.action === "sync_incremental") {
+                processIncrementalSync(ss, data);
+                return createJSONOutput({ status: "success", message: "Incremental Sync Completed" });
+            }
+
+            // ACTION: OTP (Reset Password) - LOG TO MASTER SHEET
+            if (data.action === 'log_reset') {
+                try {
+                    const ssAdmin = SpreadsheetApp.getActiveSpreadsheet();
+                    let logSheet = ssAdmin.getSheetByName("Reset_Logs");
+                    if (!logSheet) {
+                        logSheet = ssAdmin.insertSheet("Reset_Logs");
+                        logSheet.appendRow(['Timestamp', 'Clinic Name', 'OTP Code', 'Device Info', 'Sheet ID']);
+                        logSheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f3f3f3');
+                    }
+
+                    // Cari nama klinik berdasarkan sheet_id
+                    let clinicName = "Unknown/Guest";
+                    const licSheet = ssAdmin.getSheetByName(SHEET_NAMES.LICENSES);
+                    if (licSheet) {
+                        const rows = licSheet.getDataRange().getValues();
+                        const headers = rows[0].map(h => String(h).toLowerCase().trim());
+                        const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
+                        const colName = headers.indexOf('client_name');
+                        for (let i = 1; i < rows.length; i++) {
+                            if (String(rows[i][colSheetId]).trim() === String(TARGET_SHEET_ID).trim()) {
+                                clinicName = rows[i][colName];
+                                break;
+                            }
+                        }
+                    }
+
+                    logSheet.appendRow([
+                        new Date(),
+                        clinicName,
+                        "'" + data.code, // Force string with '
+                        data.deviceInfo || 'Unknown',
+                        TARGET_SHEET_ID
+                    ]);
+                    
+                    return createJSONOutput({ status: "success" });
+                } catch (e) {
+                    Logger.log("Error logging reset: " + e);
+                    return createJSONOutput({ status: "error", message: e.toString() });
+                }
+            }
+
+            // ACTION: SEND NOTIFICATION (Relay)
+            if (data.action === 'send_notif') {
+                const config = getConfigMap(ss);
+                const results = { telegram: false, email: false };
+
+                // 1. TELEGRAM
+                if (data.type === 'telegram' || data.type === 'all') {
+                    if (config.get('TELEGRAM_TOKEN') && config.get('TELEGRAM_CHAT_ID')) {
+                        results.telegram = sendTelegram(config.get('TELEGRAM_TOKEN'), config.get('TELEGRAM_CHAT_ID'), data.message);
+                    } else {
+                        results.telegram_error = "Token/ChatID Missing";
+                    }
+                }
+
+                // 2. EMAIL
+                if (data.type === 'email' || data.type === 'all') {
+                    if (config.get('EMAIL_RECEIVER')) {
+                        results.email = sendEmail(config.get('EMAIL_RECEIVER'), data.subject || "ERM Notification", data.message, config.get('EMAIL_SENDER'));
+                    } else {
+                        results.email_error = "Receiver Email Missing";
+                    }
+                }
+
+                return createJSONOutput({ status: "success", details: results });
+            }
+
+            // ACTION: PUBLIC BOOKING
+            if (data.action === 'book_appointment') {
+                return handlePublicBooking(e, data);
+            }
+
+            // ACTION: SAVE BOOKING CONFIG (Alias + Available Hours) to Licenses sheet
+            if (data.action === 'save_booking_config') {
+                const licSheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+                if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
+                const rows = licSheet.getDataRange().getValues();
+                // Find row where sheet_id (col 6) matches
+                for (let i = 1; i < rows.length; i++) {
+                    if (String(rows[i][6]) === String(data.sheet_id)) {
+                        licSheet.getRange(i + 1, 8).setValue(data.alias || ''); // H = alias
+                        licSheet.getRange(i + 1, 9).setValue(data.available_hours || ''); // I = available_hours
+                        return createJSONOutput({ status: 'success' });
+                    }
+                }
+                return createJSONOutput({ status: 'error', message: 'Sheet ID not found in Licenses.' });
+            }
+
+            return createJSONOutput({ status: "error", message: "Unknown action" });
+
+
+        } catch (err) {
+            return createJSONOutput({ status: "error", message: err.toString() });
+        } finally {
+            lock.releaseLock();
+        }
+    }
+    return createJSONOutput({ status: "error", message: "Server busy" });
+}
+
+// --- HTML SIDEBAR CONTENT ---
+function getSidebarHtml() {
+    return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <base target="_top">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Inter', sans-serif; padding: 15px; color: #333; }
+          h3 { margin-top: 0; color: #2563eb; }
+          .form-group { margin-bottom: 15px; }
+          label { display: block; font-size: 12px; margin-bottom: 5px; font-weight: bold; color: #64748b; }
+          input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+          button { background: #2563eb; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; }
+          button:hover { background: #1d4ed8; }
+          #result { margin-top: 20px; padding: 15px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; display: none; }
+          .key-display { font-family: monospace; font-size: 18px; font-weight: bold; text-align: center; margin: 10px 0; color: #1e3a8a; letter-spacing: 2px; }
+        </style>
+      </head>
+      <body>
+        <h3>🔑 License Generator</h3>
+        <div class="form-group">
+          <label>Nama Klien / Klinik</label>
+          <input type="text" id="client" placeholder="Contoh: Klinik Sehat">
+        </div>
+        <div class="form-group">
+          <label>Durasi Paket</label>
+          <select id="duration">
+            <option value="5mins">Trial 5 Menit (Cepat)</option>
+            <option value="1hour">Trial 1 Jam (Test)</option>
+            <option value="7days">Trial 7 Hari</option>
+            <option value="30days">Bulanan (30 Hari)</option>
+            <option value="3months">Triwulan (3 Bulan)</option>
+            <option value="1year">Tahunan (1 Tahun)</option>
+            <option value="lifetime">Lifetime (Selamanya)</option>
+          </select>
+        </div>
+        <button onclick="generate()">Generata Code</button>
+        
+        <div id="result">
+          <div style="font-size:11px; text-align:center; color:#64748b; margin-bottom:5px;">LICENSE KEY:</div>
+          <div id="key-out" class="key-display">...</div>
+          <div style="font-size:11px; color:#64748b;">Plan: <b id="plan-out">-</b></div>
+          <div style="font-size:11px; color:#64748b;">Expired: <b id="exp-out">-</b></div>
+          <div style="font-size:10px; color:#94a3b8; margin-top:10px; text-align:center;">Copy kode diatas dan berikan ke klien.</div>
+        </div>
+
+        <script>
+          function generate() {
+            const client = document.getElementById('client').value;
+             const duration = document.getElementById('duration').value;
+            const btn = document.querySelector('button');
+            
+            if(!client) { alert("Nama Klien wajib diisi!"); return; }
+            
+            btn.innerText = "Memproses...";
+            btn.disabled = true;
+            
+            google.script.run
+              .withSuccessHandler(onSuccess)
+              .withFailureHandler(onFail)
+              .generateNewLicense(client, duration);
+          }
+          
+          function onSuccess(res) {
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('key-out').innerText = res.key;
+            document.getElementById('plan-out').innerText = res.plan;
+            document.getElementById('exp-out').innerText = res.expiry;
+            document.querySelector('button').innerText = "Generata Code";
+            document.querySelector('button').disabled = false;
+          }
+          
+          function onFail(err) {
+            alert("Error: " + err);
+            document.querySelector('button').innerText = "Generata Code";
+            document.querySelector('button').disabled = false;
+          }
+        </script>
+      </body>
+    </html>
+    `;
+}
+

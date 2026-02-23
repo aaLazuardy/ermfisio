@@ -1,0 +1,315 @@
+/* --- UTILITIES & ANIMATION --- */
+.modal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.modal-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+@keyframes bounceShort {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-bounce-short {
+  animation: bounceShort 0.5s ease-in-out 1;
+}
+
+/* --- CALENDAR GRID --- */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background-color: #e2e8f0;
+}
+
+.calendar-day {
+  background-color: white;
+  min-height: 120px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background-color 0.2s;
+}
+
+.calendar-day:hover {
+  background-color: #f8fafc;
+}
+
+.calendar-day.other-month {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+}
+
+.calendar-day.today {
+  background-color: #eff6ff;
+}
+
+/* =========================================
+   STYLE CETAK & PREVIEW (UPDATED FLEXIBLE)
+   ========================================= */
+
+/* 1. TAMPILAN PREVIEW (Layar HP/Laptop) */
+#print-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #525659;
+  z-index: 99999;
+  overflow-y: auto;
+  display: none;
+  /* FIX: Hide by default */
+}
+
+/* Kertas di Layar Preview 
+   Kita set min-height cukup tinggi agar terlihat seperti F4 di layar,
+   tapi ini hanya visual di layar laptop/HP.
+*/
+.print-page-wrapper {
+  width: 215mm;
+  /* Lebar F4 standar (sedikit lebih lebar dari A4) */
+  min-height: 330mm;
+  /* Tinggi F4 standar */
+  padding: 15mm 20mm;
+  background-color: white;
+  margin: 40px auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+  position: relative;
+  color: #1e293b;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Responsif Kertas di HP */
+@media screen and (max-width: 768px) {
+  .print-page-wrapper {
+    width: 95%;
+    margin: 20px auto;
+    padding: 10mm;
+    min-height: auto;
+    /* Di HP biarkan panjangnya otomatis */
+  }
+}
+
+/* 2. MODE CETAK (Saat Printer Jalan) */
+@media print {
+  @page {
+    /* PENTING: Ubah 'size: A4' menjadi 'size: auto'.
+       Ini membiarkan settingan printer (Ctrl+P) yang menentukan ukuran kertas.
+       Jadi kalau user pilih F4 di dialog print, CSS akan menyesuaikan.
+    */
+    size: auto;
+    margin: 0;
+  }
+
+  body,
+  html {
+    background-color: white !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Sembunyikan UI Aplikasi */
+  #login-screen,
+  #app-layout,
+  #modal-container,
+  #preview-controls,
+  #sync-toast,
+  .no-print {
+    display: none !important;
+  }
+
+  #print-container {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    background: white !important;
+    z-index: 9999;
+    overflow: visible !important;
+  }
+
+  #preview-layer {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Reset Wrapper untuk Printer */
+  .print-page-wrapper {
+    margin: 0 !important;
+    /* Margin fisik kertas diatur oleh @page di app.js */
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    /* PENTING: Lebar 100% dan tinggi auto */
+    width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    /* PEMISAH HALAMAN (Page Break) */
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .break-inside-avoid {
+    page-break-inside: avoid;
+  }
+
+  .print-page-wrapper:last-child {
+    page-break-after: auto;
+  }
+}
+
+/* --- 3. LAYOUT DENSITY MODES (Preview & Print) --- */
+/* Compact Mode */
+body.print-compact .print-page-wrapper {
+  padding: 0 !important;
+  /* Managed by @page */
+  font-size: 9pt !important;
+}
+
+body.print-compact h1 {
+  font-size: 16pt !important;
+  margin-bottom: 2px !important;
+}
+
+body.print-compact h2 {
+  font-size: 12pt !important;
+  margin-bottom: 4px !important;
+}
+
+body.print-compact h3 {
+  font-size: 10pt !important;
+  padding-bottom: 2px !important;
+}
+
+body.print-compact p,
+body.print-compact td,
+body.print-compact li {
+  font-size: 9pt !important;
+  line-height: 1.3 !important;
+}
+
+body.print-compact .mb-4 {
+  margin-bottom: 8px !important;
+}
+
+body.print-compact .mb-6 {
+  margin-bottom: 12px !important;
+}
+
+body.print-compact .p-6 {
+  padding: 12px !important;
+}
+
+body.print-compact .gap-6 {
+  gap: 12px !important;
+}
+
+/* Relaxed Mode */
+/* Relaxed Mode */
+body.print-relaxed .print-page-wrapper {
+  padding: 0 !important;
+  /* Managed by @page */
+  font-size: 11pt !important;
+}
+
+body.print-relaxed h1 {
+  font-size: 20pt !important;
+  margin-bottom: 8px !important;
+}
+
+body.print-relaxed h2 {
+  font-size: 14pt !important;
+  margin-bottom: 8px !important;
+}
+
+body.print-relaxed h3 {
+  font-size: 12pt !important;
+  padding-bottom: 6px !important;
+}
+
+body.print-relaxed p,
+body.print-relaxed td,
+body.print-relaxed li {
+  font-size: 11pt !important;
+  line-height: 1.6 !important;
+}
+
+body.print-relaxed .mb-4 {
+  margin-bottom: 20px !important;
+}
+
+body.print-relaxed .mb-6 {
+  margin-bottom: 24px !important;
+}
+
+body.print-relaxed .p-6 {
+  padding: 20px !important;
+}
+
+body.print-relaxed .gap-6 {
+  gap: 20px !important;
+}

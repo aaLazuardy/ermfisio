@@ -1,0 +1,191 @@
+/**
+ * ERM FISIOTA BACKEND - V5.0 (MODULAR)
+ * FILE: 2_Sync.gs
+ * Deskrpsi: Fungsi Helper untuk sinkronisasi data (Read/Write Sheet).
+ */
+
+var TARGET_SHEET_ID = ""; // Global variable for dynamic targeting
+
+function getSpreadsheet() {
+    if (TARGET_SHEET_ID) {
+        try {
+            return SpreadsheetApp.openById(TARGET_SHEET_ID);
+        } catch (e) {
+            console.error("Failed to open target sheet: " + TARGET_SHEET_ID);
+            throw new Error("Gagal membuka Sheet Klien. Pastikan Sheet sudah DISHARE ke email script ini.");
+        }
+    }
+    return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function getOrInsertSheet(ss, name, headers) {
+    let sheet = ss.getSheetByName(name);
+    if (!sheet) {
+        sheet = ss.insertSheet(name);
+        sheet.appendRow(headers);
+        sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#dbeafe");
+    }
+    return sheet;
+}
+
+function getDataFromSheet(ss, sheetName) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return [];
+    const rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) return [];
+    const headers = rows[0];
+    const data = rows.slice(1);
+    return data.map(row => {
+        let obj = {};
+        headers.forEach((h, i) => {
+            let val = row[i];
+            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
+            if (h === 'time') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "HH:mm") : val;
+            obj[h] = val;
+        });
+        return obj;
+    });
+}
+
+function saveDataFixed(ss, name, data, headers) {
+    let sheet = getOrInsertSheet(ss, name, headers);
+    if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    if (!data || data.length === 0) return;
+    const rows = data.map(item => headers.map(k => {
+        let v = item[k];
+        return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
+    }));
+    sheet.getRange(2, 1, rows.length, headers.length).setNumberFormat("@").setValues(rows);
+}
+
+function updateConfigSheet(ss, configData) {
+    let sheet = getOrInsertSheet(ss, SHEET_NAMES.CONFIG, HEADERS.CONFIG);
+    const map = new Map();
+    sheet.getDataRange().getValues().slice(1).forEach((r, i) => map.set(r[0], i + 2));
+
+    configData.forEach(c => {
+        const time = new Date();
+        if (map.has(c.key)) {
+            const row = map.get(c.key);
+            sheet.getRange(row, 2).setValue(c.value);
+            sheet.getRange(row, 3).setValue(time);
+        } else {
+            sheet.appendRow([c.key, c.value, time]);
+        }
+    });
+}
+
+
+function processIncrementalSync(ss, changes) {
+    const merge = (sheetName, headers, incomingItems) => {
+        if (!incomingItems || incomingItems.length === 0) return;
+
+        const sheet = getOrInsertSheet(ss, sheetName, headers);
+        const dataRange = sheet.getDataRange();
+        const values = dataRange.getValues();
+
+        // 1. If map is empty (only has headers or nothing), just append all
+        if (values.length <= 1) {
+            const newRows = incomingItems.map(item => headers.map(k => {
+                let v = item[k];
+                return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
+            }));
+            sheet.getRange(2, 1, newRows.length, headers.length).setNumberFormat("@").setValues(newRows);
+            return;
+        }
+
+        // 2. Map existing IDs to their row INDEX (in the 'values' array)
+        // headers are at index 0. Data starts at index 1.
+        const idMap = new Map();
+        // values[i][0] is the ID column (Assuming 'id' is always first in headers)
+        for (let i = 1; i < values.length; i++) {
+            idMap.set(String(values[i][0]), i);
+        }
+
+        const newRows = [];
+        let updatedCount = 0;
+
+        // 3. Process incoming items
+        incomingItems.forEach(item => {
+            const id = String(item.id);
+            const rowData = headers.map(k => {
+                let v = item[k];
+                return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
+            });
+
+            if (idMap.has(id)) {
+                // Update in-memory array
+                const rowIndex = idMap.get(id);
+                values[rowIndex] = rowData;
+                updatedCount++;
+            } else {
+                // Collect new rows
+                newRows.push(rowData);
+            }
+        });
+
+        // 4. Batch Write Back
+        // Write updated existing rows (from values) + new rows
+        // We write the ENTIRE updated data set to ensure consistency
+        // (This is still faster than appendRow loop, and cheaper than cell-by-cell update)
+
+        let finalData = values.slice(1); // Remove header from existing data
+        if (newRows.length > 0) finalData = finalData.concat(newRows);
+
+        // Clear content and write fresh
+        if (finalData.length > 0) {
+            // Optimization: Limit range clearing to used area
+            // But safest is to clear old content first to avoid artifacts if total rows shrunk (unlikely in sync, but good practice)
+            // Actually, for INCREMENTAL sync, the total rows never shrink effectively (we don't handle deletions here yet, or 'rewriting' handles it).
+            // Since we are merging, the list only grows or stays same size (updates).
+
+            sheet.getRange(2, 1, finalData.length, headers.length).setNumberFormat("@").setValues(finalData);
+        }
+    };
+
+    if (changes.patients) merge(SHEET_NAMES.PATIENTS, HEADERS.PATIENTS, changes.patients);
+    if (changes.assessments) merge(SHEET_NAMES.ASSESSMENTS, HEADERS.ASSESSMENTS, changes.assessments);
+    if (changes.appointments) merge(SHEET_NAMES.APPOINTMENTS, HEADERS.APPOINTMENTS, changes.appointments);
+    if (changes.config) updateConfigSheet(ss, changes.config);
+}
+
+function createJSONOutput(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+// --- AUTO-UPDATE COLUMNS FEATURE ---
+function checkAndFixColumns(ss) {
+    const sheetsToCheck = [
+        { name: SHEET_NAMES.PATIENTS, headers: HEADERS.PATIENTS },
+        { name: SHEET_NAMES.ASSESSMENTS, headers: HEADERS.ASSESSMENTS },
+        { name: SHEET_NAMES.APPOINTMENTS, headers: HEADERS.APPOINTMENTS },
+        { name: SHEET_NAMES.CONFIG, headers: HEADERS.CONFIG }
+    ];
+
+    let logs = [];
+
+    sheetsToCheck.forEach(item => {
+        const sheet = ss.getSheetByName(item.name);
+        if (!sheet) {
+            // Sheet missing, getOrInsertSheet will handle it later, but good to know
+            logs.push(`[${item.name}] Sheet missing. Will be created on next sync.`);
+            return;
+        }
+
+        const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        const missingHeaders = item.headers.filter(h => !currentHeaders.includes(h));
+
+        if (missingHeaders.length > 0) {
+            // Append missing headers
+            const startCol = sheet.getLastColumn() + 1;
+            sheet.getRange(1, startCol, 1, missingHeaders.length)
+                .setValues([missingHeaders])
+                .setFontWeight("bold")
+                .setBackground("#dbeafe"); // Light Blue match
+            
+            logs.push(`[${item.name}] Added columns: ${missingHeaders.join(', ')}`);
+        } else {
+            logs.push(`[${item.name}] All columns present.`);
+        }
+    });
+
+    return logs;
+}

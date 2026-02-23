@@ -1,0 +1,233 @@
+/**
+ * ERM FISIOTA BACKEND - V5.0 (MODULAR)
+ * FILE: 5_Public.gs
+ * Deskripsi: Endpoint khusus untuk Public Booking (Pasien).
+ * Termasuk: Auto-registrasi pasien baru + pencocokan pasien lama by No HP.
+ */
+
+function handlePublicBooking(e, data) {
+    const ss = getSpreadsheet(); // Uses TARGET_SHEET_ID from Main.gs (set via sheet_id param)
+
+    // 1. Validation
+    if (!data.date || !data.time || !data.name || !data.contact) {
+        return createJSONOutput({ status: "error", message: "Data tidak lengkap (Tanggal, Jam, Nama, Kontak wajib diisi)." });
+    }
+
+    // 2. Check Availability (Prevent Double Booking)
+    const apptSheet = ss.getSheetByName(SHEET_NAMES.APPOINTMENTS);
+    if (apptSheet && apptSheet.getLastRow() > 1) {
+        const rows = apptSheet.getDataRange().getValues();
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            let rDate = row[2];
+            if (rDate instanceof Date) rDate = Utilities.formatDate(rDate, TIMEZONE, "yyyy-MM-dd");
+            const rTime = row[3];
+            const rStatus = row[8];
+            if (rDate === data.date && rTime === data.time && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
+                return createJSONOutput({ status: "error", message: "Maaf, slot waktu ini sudah terisi." });
+            }
+        }
+    }
+
+    // 3. Smart Patient Matching — Cari pasien by No HP
+    const patientSheet = getOrInsertSheet(ss, SHEET_NAMES.PATIENTS, HEADERS.PATIENTS);
+    const patientData = patientSheet.getDataRange().getValues();
+    const phoneClean = String(data.contact).replace(/\D/g, ''); // Bersihkan nomor HP
+    let patientId = '';
+    let isNewPatient = false;
+
+    // Cari di data pasien existing (skip header, mulai index 1)
+    // HEADERS.PATIENTS: ['id', 'name', 'category', 'gender', 'dob', 'phone', ...]
+    // phone ada di index 5
+    for (let i = 1; i < patientData.length; i++) {
+        const existingPhone = String(patientData[i][5]).replace(/\D/g, '');
+        if (existingPhone && existingPhone === phoneClean) {
+            patientId = patientData[i][0]; // Gunakan ID/RM yang sudah ada
+            break;
+        }
+    }
+
+    // Jika tidak ditemukan → buat pasien baru dengan RM otomatis
+    if (!patientId) {
+        isNewPatient = true;
+        patientId = generateNextRM(patientData);
+
+        const now = Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+        const newPatient = {
+            id: patientId,
+            name: data.name,
+            category: 'BOOKING',
+            gender: '',
+            dob: '',
+            phone: data.contact,
+            job: '',
+            address: '',
+            diagnosis: '',
+            quota: 0,
+            defaultFee: 0,
+            updatedAt: now
+        };
+
+        const patientRow = HEADERS.PATIENTS.map(k => newPatient[k] !== undefined ? newPatient[k] : '');
+        patientSheet.appendRow(patientRow);
+        // Force kolom phone (F) jadi teks agar 0 di depan tidak hilang
+        const patLastRow = patientSheet.getLastRow();
+        patientSheet.getRange(patLastRow, 6).setNumberFormat('@').setValue(data.contact);
+    }
+
+    // 4. Create Booking Record — linked to patient
+    const newId = "APT-" + Date.now();
+    const newAppointment = {
+        id: newId,
+        patientId: patientId, // RM pasien (bukan GUEST lagi!)
+        date: data.date,
+        time: data.time,
+        therapistId: '-',
+        notes: data.complaint || '-',
+        groupId: '-',
+        fee: 0,
+        status: 'PENDING',
+        patientType: isNewPatient ? 'BARU' : 'LAMA',
+        visitor_name: data.name,
+        visitor_contact: data.contact,
+        updatedAt: Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd HH:mm:ss")
+    };
+
+    const sheet = getOrInsertSheet(ss, SHEET_NAMES.APPOINTMENTS, HEADERS.APPOINTMENTS);
+    const rowData = HEADERS.APPOINTMENTS.map(k => newAppointment[k] || "");
+    sheet.appendRow(rowData);
+    // Force kolom visitor_contact (L, kolom 12) jadi teks agar 0 di depan tidak hilang
+    const apptLastRow = sheet.getLastRow();
+    sheet.getRange(apptLastRow, 12).setNumberFormat('@').setValue(data.contact);
+
+    // 5. Send Notification to Admin (Telegram) + WA Quick Reply Links
+    try {
+        const config = getConfigMap(ss);
+        if (config.get('TELEGRAM_TOKEN') && config.get('TELEGRAM_CHAT_ID')) {
+            const patientLabel = isNewPatient ? '🆕 PASIEN BARU' : '🔄 PASIEN LAMA';
+
+            // Sanitize patient phone for WA link
+            let waPhone = String(data.contact).replace(/\D/g, '');
+            if (waPhone.startsWith('0')) waPhone = '62' + waPhone.substring(1);
+            if (waPhone.startsWith('8')) waPhone = '62' + waPhone;
+
+            // Format tanggal Indonesia
+            const d = new Date(data.date);
+            const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+            const months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+            const dateIndo = `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+
+            // Get clinic name
+            let clinicName = 'FISIOTA';
+            try {
+                const ci = config.get('clinic_info');
+                if (ci) clinicName = (typeof ci === 'string' ? JSON.parse(ci) : ci).name || clinicName;
+            } catch(e) {}
+
+            // Auto-construct booking URL from alias in Licenses sheet
+            let bookingUrl = NETLIFY_URL + '/Booking/'; // fallback default
+            try {
+                const ssAdmin = SpreadsheetApp.openById(SHEET_ID || SpreadsheetApp.getActiveSpreadsheet().getId());
+                const licSheet = ssAdmin.getSheetByName(SHEET_NAMES.LICENSES);
+                if (licSheet) {
+                    const currentSheetId = ss.getId();
+                    const licRows = licSheet.getDataRange().getValues();
+                    const licHeaders = licRows[0].map(h => String(h).toLowerCase().trim());
+                    const colSheetId = licHeaders.indexOf('sheet_id') !== -1 ? licHeaders.indexOf('sheet_id') : licHeaders.indexOf('sheet id');
+                    const colAlias   = licHeaders.indexOf('alias');
+                    for (let i = 1; i < licRows.length; i++) {
+                        if (String(licRows[i][colSheetId]).trim() === currentSheetId && licRows[i][colAlias]) {
+                            bookingUrl = `${NETLIFY_URL}/Booking/?id=${licRows[i][colAlias]}`;
+                            break;
+                        }
+                    }
+                }
+            } catch(e) { Logger.log('Alias lookup error: ' + e); }
+
+            // WA: Teks Konfirmasi
+            const waConfirmText =
+                `Assalamualaikum Wr. Wb. 🌟\n\n` +
+                `Halo, Kak ${data.name}! 😊\n\n` +
+                `Kami dari *${clinicName}* dengan senang hati menginformasikan bahwa jadwal Fisioterapi Kakak telah berhasil kami *konfirmasi* ✅\n\n` +
+                `🗓️ *Detail Jadwal:*\n` +
+                `┌─────────────────────\n` +
+                `│ 📅 Tanggal : ${dateIndo}\n` +
+                `│ ⏰ Jam        : ${data.time} WIB\n` +
+                `│ 📝 Keluhan : ${data.complaint || '-'}\n` +
+                `└─────────────────────\n\n` +
+                `📌 *Mohon diperhatikan:*\n` +
+                `• Hadir 5-10 menit sebelum jadwal\n` +
+                `• Gunakan pakaian yang nyaman\n` +
+                `• Jika ada perubahan, mohon hubungi kami sebelumnya\n\n` +
+                `Kami tunggu kedatangan Kakak 🙏\n` +
+                `Semoga segera pulih dan sehat selalu! 💪\n\n` +
+                `Wassalamualaikum Wr. Wb.\n` +
+                `~ *Admin ${clinicName}*`;
+
+            // WA: Teks Tolak + Sarankan Jadwal Lain
+            const waRejectText =
+                `Assalamualaikum Wr. Wb. 🌟\n\n` +
+                `Halo, Kak ${data.name}! 😊\n\n` +
+                `Terima kasih telah mempercayakan kesehatan Kakak kepada *${clinicName}* 🙏\n\n` +
+                `Dengan hormat, kami informasikan bahwa slot waktu yang Kakak pilih:\n` +
+                `📅 *${dateIndo}* pukul *${data.time} WIB*\n` +
+                `saat ini *belum dapat kami terima* dikarenakan jadwal yang sudah penuh. 🙏\n\n` +
+                `*Kami sangat menyarankan* Kakak untuk memilih jadwal alternatif lain yang masih tersedia. Silakan booking ulang melalui link berikut:\n` +
+                `🔗 ${bookingUrl}\n\n` +
+                `Kami mohon maaf atas ketidaknyamanan ini dan berharap dapat segera melayani Kakak di waktu yang lebih sesuai 🌷\n\n` +
+                `Wassalamualaikum Wr. Wb.\n` +
+                `~ *Admin ${clinicName}*`;
+
+            // Build WA links
+            const waConfirmLink = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waConfirmText)}` : null;
+            const waRejectLink  = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waRejectText)}`  : null;
+
+            // Build Telegram message
+            let msg =
+                `🔔 BOOKING BARU (PENDING)\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `${patientLabel}\n` +
+                `🏥 No. RM: ${patientId}\n` +
+                `👤 Nama: ${data.name}\n` +
+                `📅 ${dateIndo}  |  ⏰ ${data.time} WIB\n` +
+                `📞 ${data.contact}\n` +
+                `📝 Keluhan: ${data.complaint || '-'}\n` +
+                `━━━━━━━━━━━━━━━━━━\n` +
+                `Balas via WA:\n`;
+
+            if (waConfirmLink) msg += `✅ [KONFIRMASI](${waConfirmLink})\n`;
+            if (waRejectLink)  msg += `❌ [TOLAK / JADWAL LAIN](${waRejectLink})\n`;
+            msg += `\nAtau buka aplikasi untuk update status.`;
+
+            sendTelegram(config.get('TELEGRAM_TOKEN'), config.get('TELEGRAM_CHAT_ID'), msg);
+        }
+    } catch (notifErr) {
+        console.warn("Failed to send notif: " + notifErr);
+    }
+
+    return createJSONOutput({
+        status: "success",
+        message: "Permintaan Booking berhasil dikirim! Mohon tunggu konfirmasi admin via WhatsApp.",
+        booking_id: newId,
+        patient_id: patientId,
+        is_new_patient: isNewPatient
+    });
+}
+
+/**
+ * Generate No RM otomatis: PX-0001, PX-0002, dst.
+ * Membaca data pasien existing untuk menentukan nomor berikutnya.
+ */
+function generateNextRM(patientData) {
+    let maxNum = 0;
+    for (let i = 1; i < patientData.length; i++) {
+        const id = String(patientData[i][0]);
+        const match = id.match(/^PX-(\d+)$/i);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+        }
+    }
+    const nextNum = maxNum + 1;
+    return 'PX-' + String(nextNum).padStart(4, '0');
+}

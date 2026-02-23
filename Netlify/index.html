@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>ERM FISIOTA - Integrated System</title>
+   <meta name="theme-color" content="#2563eb">
+
+   <script src="https://cdn.tailwindcss.com"></script>
+   <script src="https://unpkg.com/lucide@latest"></script>
+
+   <link rel="stylesheet" href="style.css">
+   <script>
+      window.onerror = function (msg, url, line, col, error) {
+         // IGNORE GENERIC SCRIPT ERRORS (CORS/Ext)
+         if (msg && typeof msg === 'string' && msg.toLowerCase().indexOf('script error') > -1 && (!line || line === 0)) {
+            console.warn('Ignored CORS Script Error:', msg);
+            return true;
+         }
+
+         const errorBox = document.createElement('div');
+         errorBox.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;padding:20px;background:#fee;border:2px solid #f00;color:#c00;z-index:99999;font-family:monospace;white-space:pre-wrap;box-shadow:0 4px 6px rgba(0,0,0,0.1);border-radius:4px;font-size:12px;';
+         errorBox.innerHTML = `<strong>Runtime Error:</strong><br>${msg}<br><br>Location: ${url}:${line}:${col}<br><br>Stack: ${error ? error.stack : 'N/A'}`;
+         document.body.appendChild(errorBox);
+         return false;
+      };
+   </script>
+</head>
+
+<body class="bg-slate-50 font-sans text-slate-800 h-screen overflow-hidden">
+
+   <div id="login-screen" class="hidden fixed inset-0 z-[999999999] bg-slate-100 overflow-y-auto">
+      <div class="min-h-screen flex items-center justify-center p-4">
+         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-4 border-blue-600 fade-in">
+            <div class="text-center mb-8">
+               <h1 class="text-4xl font-black text-blue-600 tracking-tight mb-1">FISIOTA</h1>
+               <p class="text-slate-500 text-sm">Clinical Record System</p>
+            </div>
+            <div id="login-error"
+               class="hidden bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm flex items-center gap-2"></div>
+            <form onsubmit="handleLogin(event)" class="space-y-6">
+               <div>
+                  <label for="username" class="block text-xs font-bold text-slate-500 uppercase mb-2">Username</label>
+                  <input type="text" id="username" autocomplete="off"
+                     class="w-full border-2 border-slate-200 rounded-xl p-3 focus:border-blue-500 focus:ring-0 outline-none text-slate-800 font-medium transition-colors bg-white"
+                     placeholder="Username...">
+               </div>
+               <div>
+                  <label for="password" class="block text-xs font-bold text-slate-500 uppercase mb-2">Password</label>
+                  <input type="password" id="password" autocomplete="off"
+                     class="w-full border-2 border-slate-200 rounded-xl p-3 focus:border-blue-500 focus:ring-0 outline-none text-slate-800 font-medium transition-colors bg-white"
+                     placeholder="Password...">
+               </div>
+               <button type="submit"
+                  class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-200 btn-press uppercase tracking-wide text-sm">
+                  Masuk Aplikasi
+               </button>
+               <div class="text-center mt-4">
+                  <div class="mt-8 pt-4 border-t border-slate-100 text-center">
+                     <p class="text-[10px] text-slate-300 mb-1">Mengalami kendala login?</p>
+                     <button type="button" onclick="requestResetCode(event)"
+                        class="text-[10px] text-slate-400 hover:text-red-600 underline transition-colors font-bold">
+                        Lupa Password? Request Reset Kode
+                     </button>
+                  </div>
+                  <a href="javascript:void(0)"
+                     class="text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors flex items-center justify-center gap-1">
+                     <i data-lucide="message-circle" width="14"></i> Hubungi Admin
+                  </a>
+               </div>
+            </form>
+         </div>
+      </div>
+   </div>
+
+   <div id="app-layout" class="hidden flex h-screen">
+      <div id="sidebar-overlay" onclick="toggleSidebar()"
+         class="fixed inset-0 bg-black/50 z-20 hidden md:hidden glass transition-opacity"></div>
+      <aside id="app-sidebar"
+         class="fixed md:relative w-64 h-full bg-slate-900 text-white flex flex-col shadow-2xl z-30 transition-transform duration-300 transform -translate-x-full md:translate-x-0">
+         <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+            <div>
+               <h1 class="text-2xl font-bold text-blue-400 tracking-tight">FISIOTA</h1>
+               <p class="text-xs text-slate-400 mt-1">Rekam Medis Fisioterapi</p>
+            </div>
+            <button type="button" onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white">
+               <i data-lucide="x" width="24"></i>
+            </button>
+         </div>
+         <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <button type="button" onclick="navigate('dashboard'); toggleSidebar()"
+               class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
+               id="nav-dashboard">
+               <i data-lucide="layout-dashboard" width="20"></i> <span class="font-medium">Dashboard</span>
+            </button>
+            <button type="button" onclick="navigate('schedule'); toggleSidebar()"
+               class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
+               id="nav-schedule">
+               <i data-lucide="calendar" width="20"></i> <span class="font-medium">Jadwal Terapi</span>
+            </button>
+            <button type="button" onclick="navigate('patients'); toggleSidebar()"
+               class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
+               id="nav-patients">
+               <i data-lucide="users" width="20"></i> <span class="font-medium">Data Pasien</span>
+            </button>
+            <button type="button" onclick="navigate('assessments'); toggleSidebar()"
+               class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
+               id="nav-assessments">
+               <i data-lucide="file-text" width="20"></i> <span class="font-medium">Assessment ICF</span>
+            </button>
+            <button type="button" onclick="navigate('config'); toggleSidebar()"
+               class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
+               id="nav-config">
+               <i data-lucide="settings" width="20"></i> <span class="font-medium">Konfigurasi Data</span>
+            </button>
+         </nav>
+         <div class="p-4 border-t border-slate-700 bg-slate-800">
+            <div class="flex items-center gap-3 mb-3">
+               <div
+                  class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold shadow-lg text-white border-2 border-slate-600"
+                  id="user-avatar">U</div>
+               <div>
+                  <p class="text-sm font-medium text-white" id="user-name">User</p>
+                  <p class="text-xs text-slate-400" id="user-role">Fisioterapis</p>
+               </div>
+            </div>
+            <button type="button" onclick="handleLogout()"
+               class="w-full flex items-center justify-center gap-2 bg-red-600/90 hover:bg-red-600 p-2 rounded-lg text-sm transition-all btn-press text-white">
+               <i data-lucide="log-out" width="16"></i> Logout
+            </button>
+         </div>
+      </aside>
+
+      <main class="flex-1 overflow-hidden relative bg-slate-50 flex flex-col w-full" id="main-wrapper">
+         <div
+            class="bg-white h-16 border-b border-slate-200 flex items-center px-4 md:px-8 justify-between shrink-0 shadow-sm z-10">
+            <div class="flex items-center gap-3">
+               <button type="button" onclick="toggleSidebar()"
+                  class="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+                  <i data-lucide="menu" width="24"></i>
+               </button>
+               <h2 class="text-lg md:text-xl font-bold text-slate-800" id="page-title">Dashboard</h2>
+            </div>
+            <div class="flex items-center gap-2 md:gap-3">
+               <div id="sync-status"
+                  class="hidden text-[10px] md:text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded flex items-center gap-1">
+                  <i data-lucide="check-circle" width="12"></i> <span class="hidden md:inline">Terhubung</span>
+               </div>
+               <div
+                  class="text-[10px] md:text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-medium truncate max-w-[120px] md:max-w-none"
+                  id="current-date"></div>
+            </div>
+         </div>
+         <div class="flex-1 overflow-y-auto p-6 md:p-8 scroll-smooth" id="main-content"></div>
+      </main>
+   </div>
+
+   <div id="print-container"
+      class="hidden bg-slate-600 w-full h-screen absolute top-0 left-0 z-50 overflow-y-auto overflow-x-hidden"></div>
+
+   <div id="modal-container" class="hidden relative z-[9999999999]">
+      <div class="fixed inset-0 bg-black/60 backdrop-blur-sm w-screen h-screen transition-opacity"
+         onclick="closeModal()"></div>
+      <div class="fixed inset-0 z-10 w-screen h-screen overflow-y-auto">
+         <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <div
+               class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 w-full max-w-lg flex flex-col max-h-[85vh]"
+               id="modal-content"></div>
+         </div>
+      </div>
+   </div>
+
+   <div id="choice-modal" class="hidden relative z-[10000]">
+      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm w-screen h-screen"></div>
+      <div class="fixed inset-0 z-10 w-screen h-screen flex items-center justify-center p-4">
+         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full transform scale-100 transition-all">
+            <h3 class="text-lg font-bold text-slate-800 mb-2" id="choice-title">Konfirmasi</h3>
+            <p class="text-sm text-slate-600 mb-6" id="choice-desc">Jadwal ini adalah bagian dari paket berulang.</p>
+            <div class="flex flex-col gap-3">
+               <button id="btn-choice-all"
+                  class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors">
+                  Ubah Semua Jadwal (Paket)
+               </button>
+               <button id="btn-choice-one"
+                  class="w-full bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 font-bold py-2.5 rounded-lg text-sm transition-colors">
+                  Hanya Jadwal Ini Saja
+               </button>
+               <button onclick="document.getElementById('choice-modal').classList.add('hidden')"
+                  class="w-full text-slate-400 text-xs font-medium hover:text-slate-600 py-1">
+                  Batal
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+
+   <div id="sync-toast"
+      class="hidden fixed bottom-5 right-5 z-[10000] bg-white border-l-4 border-yellow-500 rounded-lg shadow-2xl p-4 max-w-sm animate-bounce-short">
+      <div class="flex items-start gap-3">
+         <div class="bg-yellow-100 p-2 rounded-full text-yellow-600">
+            <i data-lucide="refresh-cw" width="20"></i>
+         </div>
+         <div>
+            <h4 class="font-bold text-slate-800 text-sm">Sinkronisasi Data</h4>
+            <p class="text-xs text-slate-500 mt-1 mb-3">Pastikan data di aplikasi sama dengan Google Sheet terbaru.</p>
+            <div class="flex gap-2">
+               <button type="button" onclick="pullDataFromSheet(); closeSyncToast()"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors shadow-md">
+                  Tarik Data Sekarang
+               </button>
+               <button type="button" onclick="closeSyncToast()"
+                  class="text-xs text-slate-400 font-bold hover:text-slate-600 px-2 py-1.5">
+                  Nanti Saja
+               </button>
+            </div>
+         </div>
+      </div>
+   </div>
+
+   <script src="assets.js"></script>
+   <script src="data.js"></script>
+   <script src="config.js"></script>
+   <script src="app.js"></script>
+
+</body>
+
+</html>
