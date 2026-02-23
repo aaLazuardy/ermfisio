@@ -741,13 +741,30 @@ function renderApp() {
         const pageTitle = document.getElementById('page-title');
         main.innerHTML = '';
 
-        if (state.currentView === 'dashboard') { pageTitle.innerText = 'Dashboard'; renderDashboard(main); }
-        else if (state.currentView === 'schedule') { pageTitle.innerText = 'Jadwal Terapi'; renderScheduleView(main); }
-        else if (state.currentView === 'patients') { pageTitle.innerText = 'Data Master Pasien'; renderPatientList(main); }
-        else if (state.currentView === 'assessments') { pageTitle.innerText = 'Riwayat Assessment'; renderAssessmentList(main); }
-        else if (state.currentView === 'assessment_form') { pageTitle.innerText = 'Formulir Assessment'; renderAssessmentForm(main, false); }
-        else if (state.currentView === 'kasir') { pageTitle.innerText = 'Kasir & Pembayaran'; renderKasirView(main); }
-        else if (state.currentView === 'config') { pageTitle.innerText = 'Konfigurasi'; renderConfigView(main); }
+        try {
+            if (state.currentView === 'dashboard') { pageTitle.innerText = 'Dashboard'; renderDashboard(main); }
+            else if (state.currentView === 'schedule') { pageTitle.innerText = 'Jadwal Terapi'; renderScheduleView(main); }
+            else if (state.currentView === 'patients') { pageTitle.innerText = 'Data Master Pasien'; renderPatientList(main); }
+            else if (state.currentView === 'assessments') { pageTitle.innerText = 'Riwayat Assessment'; renderAssessmentList(main); }
+            else if (state.currentView === 'assessment_form') { pageTitle.innerText = 'Formulir Assessment'; renderAssessmentForm(main, false); }
+            else if (state.currentView === 'kasir') { pageTitle.innerText = 'Kasir & Pembayaran'; renderKasirView(main); }
+            else if (state.currentView === 'config') { pageTitle.innerText = 'Konfigurasi'; renderConfigView(main); }
+        } catch (err) {
+            console.error("Render Error:", err);
+            main.innerHTML = `
+                <div class="p-10 text-center">
+                    <div class="bg-red-50 text-red-700 p-6 rounded-2xl border-2 border-red-100 max-w-xl mx-auto">
+                        <i data-lucide="alert-triangle" width="48" class="mx-auto mb-4 text-red-500"></i>
+                        <h2 class="text-xl font-bold mb-2">Gagal Memuat Halaman</h2>
+                        <p class="text-sm opacity-80 mb-4">Terjadi kesalahan teknis saat merender tampilan ini.</p>
+                        <div class="bg-white/50 p-3 rounded text-left text-xs font-mono mb-6 overflow-x-auto">
+                            ${err.message}
+                        </div>
+                        <button onclick="location.reload()" class="bg-red-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-red-700 transition-all">Muat Ulang Aplikasi</button>
+                    </div>
+                </div>`;
+            renderIcons();
+        }
 
         renderIcons();
     }
@@ -3393,9 +3410,9 @@ function renderKasirAntrian(formatRp) {
                             <p class="font-medium">Semua pasien hari ini sudah lunas!</p>
                        </div>`
             : antrian.map(a => {
-                const p = state.patients.find(pt => pt.id === a.patientId);
-                const nama = p ? p.name : (a.name || 'Pasien Baru');
-                const terapis = state.users.find(u => u.id === a.therapistId);
+                const p = (state.patients || []).find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien Baru');
+                const terapis = (state.users || []).find(u => u.id === a.therapistId);
                 return `
                         <div class="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors">
                             <div class="text-center min-w-[52px]">
@@ -3428,8 +3445,8 @@ function renderKasirAntrian(formatRp) {
             </div>
             <div class="divide-y divide-slate-100">
                 ${lunas.map(a => {
-                const p = state.patients.find(pt => pt.id === a.patientId);
-                const nama = p ? p.name : (a.name || 'Pasien');
+                const p = (state.patients || []).find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
                 const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'QRIS': '📱', 'BPJS': '🏥' };
                 return `
                     <div class="flex items-center gap-4 px-6 py-3 bg-emerald-50/30">
@@ -3568,9 +3585,9 @@ function renderKasirLaporan(formatRp) {
                         </thead>
                         <tbody class="divide-y divide-slate-100">
                             ${filtered.map(a => {
-                const p = state.patients.find(pt => pt.id === a.patientId);
-                const nama = p ? p.name : (a.name || 'Pasien');
-                const terapis = state.users.find(u => u.id === a.therapistId);
+                const p = (state.patients || []).find(pt => pt.id === a.patientId);
+                const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
+                const terapis = (state.users || []).find(u => u.id === a.therapistId);
                 const paidDate = a.paidAt ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
                 const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'QRIS': 'bg-purple-100 text-purple-700', 'BPJS': 'bg-teal-100 text-teal-700' };
                 const mc = methodColors[a.paymentMethod] || 'bg-slate-100 text-slate-600';
