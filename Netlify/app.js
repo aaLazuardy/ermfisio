@@ -776,7 +776,11 @@ function renderDashboard(container) {
     const today = new Date().toISOString().slice(0, 10);
     const todayAppointments = state.appointments.filter(a => a.date === today);
     const todayIncome = (state.appointments || [])
-        .filter(a => a.paymentStatus && a.paymentStatus.toUpperCase() === 'PAID' && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today)
+        .filter(a => {
+            const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+            const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+            return (isPaid || isLegacyPaid) && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today;
+        })
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
     const unpaidToday = (state.appointments || []).filter(a => a.date === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
@@ -3367,13 +3371,17 @@ function switchKasirTab(tab) {
 
 function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
-    const antrian = (state.appointments || []).filter(a =>
-        a.date === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID'
-    ).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    const antrian = (state.appointments || []).filter(a => {
+        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        return a.date === today && (a.status === 'CONFIRMED' || !a.status) && !isPaid && !isLegacyPaid;
+    }).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
-    const lunas = (state.appointments || []).filter(a =>
-        a.date === today && (a.paymentStatus || '').toUpperCase() === 'PAID'
-    ).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || ''));
+    const lunas = (state.appointments || []).filter(a => {
+        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        return a.date === today && (isPaid || isLegacyPaid);
+    }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const totalLunasHariIni = lunas.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
 
@@ -3472,12 +3480,12 @@ function renderKasirLaporan(formatRp) {
     const savedFrom = state.laporanFrom || defaultFrom;
     const savedTo = state.laporanTo || defaultTo;
 
-    const filtered = (state.appointments || []).filter(a =>
-        (a.paymentStatus || '').toUpperCase() === 'PAID' &&
-        (a.paidAt || a.date) &&
-        (a.paidAt || a.date).slice(0, 10) >= savedFrom &&
-        (a.paidAt || a.date).slice(0, 10) <= savedTo
-    ).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
+    const filtered = (state.appointments || []).filter(a => {
+        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        const dateMatch = (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) >= savedFrom && (a.paidAt || a.date).slice(0, 10) <= savedTo;
+        return (isPaid || isLegacyPaid) && dateMatch;
+    }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const total = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
     const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
