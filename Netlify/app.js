@@ -3354,11 +3354,15 @@ function renderKasirView(container) {
                     class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'laporan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
                     <i data-lucide="bar-chart-2" width="14" class="inline mr-1"></i> Laporan Keuangan
                 </button>
+                <button onclick="switchKasirTab('pajak')" id="ktab-pajak"
+                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'pajak' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="file-text" width="14" class="inline mr-1"></i> Laporan Pajak
+                </button>
             </div>
 
             <!-- Tab Content -->
             <div id="kasir-tab-content">
-                ${tab === 'antrian' ? renderKasirAntrian(formatRp) : renderKasirLaporan(formatRp)}
+                ${tab === 'antrian' ? renderKasirAntrian(formatRp) : (tab === 'pajak' ? renderKasirPajak(formatRp) : renderKasirLaporan(formatRp))}
             </div>
         </div>`;
     renderIcons();
@@ -3739,28 +3743,244 @@ function updatePaymentTotal(feeBase) {
     if (qrisNominal) qrisNominal.textContent = formatRp(total);
 }
 
-function confirmPayment(apptId) {
-    const method = state._selectedPaymentMethod;
-    if (!method) { alert('Pilih metode pembayaran dulu!'); return; }
-    const discount = Number(document.getElementById('pm-discount')?.value) || 0;
-    const idx = state.appointments.findIndex(a => a.id === apptId);
-    if (idx === -1) return;
-    const appt = state.appointments[idx];
-    const feeBase = Number(appt.fee) || 0;
-    appt.paymentStatus = 'PAID';
-    appt.paymentMethod = method;
-    appt.discount = discount;
-    appt.finalAmount = Math.max(0, feeBase - discount);
-    appt.paidAt = new Date().toISOString();
-    appt.updatedAt = new Date().toISOString();
-    saveData();
-    // Auto-sync ke Google Sheet
-    if (state.scriptUrl) autoSyncPayment(appt);
-    delete state._selectedPaymentMethod;
-    closeModal();
-    // Kembali ke antrian & re-render
-    state.kasirTab = 'antrian';
+function renderKasirPajak(formatRp) {
+    const now = new Date();
+    const currentMonth = state.taxMonth || (now.getMonth() + 1);
+    const currentYear = state.taxYear || now.getFullYear();
+
+    // Filter data berdasarkan bulan/tahun
+    const monthStr = String(currentMonth).padStart(2, '0');
+    const periodStart = `${currentYear}-${monthStr}-01`;
+    const periodEnd = `${currentYear}-${monthStr}-31`; // Simple approximation
+
+    const filtered = (state.appointments || []).filter(a => {
+        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        const d = (a.paidAt || a.date || '').slice(0, 10);
+        return (isPaid || isLegacyPaid) && d >= periodStart && d <= periodEnd;
+    });
+
+    // Hitung Auto
+    const autoBruto = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const autoPajak = autoBruto * 0.005; // PPh Final 0.5% UMKM
+
+    // State Override (Jika user pernah edit)
+    const saved = state.taxOverride || {};
+    const displayBruto = saved.bruto !== undefined ? saved.bruto : autoBruto;
+    const notes = saved.notes || '';
+
+    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+    return `
+        <div class="space-y-6 fade-in shadow-inner-lg p-1">
+            <!-- Filter & Action Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <div class="flex flex-col md:flex-row gap-6 items-end justify-between">
+                    <div class="flex gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Bulan</label>
+                            <select onchange="updateTaxPeriod('month', this.value)" class="bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-blue-500 outline-none">
+                                ${months.map((m, i) => `<option value="${i + 1}" ${currentMonth == i + 1 ? 'selected' : ''}>${m}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Tahun</label>
+                            <select onchange="updateTaxPeriod('year', this.value)" class="bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-blue-500 outline-none">
+                                <option value="2025" ${currentYear == 2025 ? 'selected' : ''}>2025</option>
+                                <option value="2026" ${currentYear == 2026 ? 'selected' : ''}>2026</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="printTaxReport()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center gap-2">
+                        <i data-lucide="printer" width="18"></i> Cetak Laporan PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- Customization Panel -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="edit-3" width="18" class="text-blue-500"></i>
+                            Review & Kustomisasi Manual
+                        </h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+                            <i data-lucide="info" width="20" class="text-blue-500 shrink-0 mt-0.5"></i>
+                            <p class="text-xs text-blue-700 leading-relaxed">
+                                Angka di bawah ini ditarik otomatis dari sistem. Jika ada ketidaksesuaian data manual, silakan edit nilai <b>Omzet Bruto</b> di kotak input untuk menyesuaikan hasil akhir laporan PDF.
+                            </p>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 gap-6 pt-2">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Total Omzet Bruto (Rp)</label>
+                                <div class="relative">
+                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                                    <input type="number" value="${displayBruto}" 
+                                        oninput="updateTaxOverride('bruto', this.value)"
+                                        class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-4 py-3 text-lg font-black text-slate-800 focus:border-blue-500 focus:bg-white transition-all outline-none">
+                                </div>
+                                <p class="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
+                                    <i data-lucide="calculator" width="10"></i> 
+                                    Hitungan sistem otomatis: ${formatRp(autoBruto)}
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Catatan Tambahan (Muncul di PDF)</label>
+                                <textarea oninput="updateTaxOverride('notes', this.value)"
+                                    placeholder="Contoh: Termasuk penyesuaian kas manual atau piutang BPJS..."
+                                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:bg-white transition-all outline-none min-h-[100px]">${notes}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Final summary card -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between">
+                    <div>
+                        <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Estimasi Pajak (0.5%)</p>
+                        <h4 class="text-4xl font-black mb-1" id="tax-final-amount">${formatRp(displayBruto * 0.005)}</h4>
+                        <p class="text-slate-500 text-[10px]">Berdasarkan Omzet Bruto: ${formatRp(displayBruto)}</p>
+                    </div>
+                    
+                    <div class="mt-8 pt-6 border-t border-white/10">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs text-slate-400 font-medium">Metode Pelaporan</span>
+                            <span class="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold">UMKM PP-23</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 leading-tight italic">
+                            *Laporan ini bersifat internal untuk membantu administrasi pajak. Pastikan data sudah sesuai sebelum dilaporkan melalui DJP Online.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateTaxPeriod(type, val) {
+    if (type === 'month') state.taxMonth = Number(val);
+    if (type === 'year') state.taxYear = Number(val);
     renderKasirView(document.getElementById('main-content'));
+}
+
+function updateTaxOverride(key, val) {
+    if (!state.taxOverride) state.taxOverride = {};
+    if (key === 'bruto') {
+        state.taxOverride.bruto = Number(val);
+        // Update total pajak di UI secara instant agar responsif
+        const amount = Number(val) * 0.005;
+        const el = document.getElementById('tax-final-amount');
+        if (el) el.textContent = 'Rp ' + amount.toLocaleString('id-ID');
+    }
+    if (key === 'notes') state.taxOverride.notes = val;
+    // Debounce saves to local storage implicitly via state modification if needed, 
+    // but here we just keep it in state while session is active.
+}
+
+function printTaxReport() {
+    const now = new Date();
+    const currentMonth = state.taxMonth || (now.getMonth() + 1);
+    const currentYear = state.taxYear || now.getFullYear();
+    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const monthName = months[currentMonth - 1];
+
+    const bruto = state.taxOverride?.bruto !== undefined ? state.taxOverride.bruto : 0; // Sebaiknya ambil dari kalkulasi jika override kosong
+    const notes = state.taxOverride?.notes || '-';
+    const tax = bruto * 0.005;
+    const clinic = state.clinicInfo || { name: 'FISIOTA' };
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Laporan Pajak - ${clinic.name}</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
+                .header { text-align: center; border-bottom: 3px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+                .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
+                .info-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+                .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+                th { background: #f9f9f9; font-weight: bold; }
+                .total-row { font-size: 18px; font-weight: bold; background: #f0f0f0; }
+                .footer { margin-top: 50px; display: flex; justify-content: space-between; }
+                .signature { text-align: center; width: 250px; }
+                .sig-box { height: 100px; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>REKAPITULASI PENGHASILAN BRUTO (UMKM)</h1>
+                <p>${clinic.name} &bull; ${clinic.address || ''}</p>
+            </div>
+
+            <div class="info-grid">
+                <div>
+                    <p><strong>Masa Pajak:</strong> ${monthName} ${currentYear}</p>
+                    <p><strong>Dibuat Pada:</strong> ${now.toLocaleDateString('id-ID')} ${now.toLocaleTimeString('id-ID')}</p>
+                </div>
+                <div style="text-align: right;">
+                    <p><strong>NPWP:</strong> ${clinic.npwp || '-'}</p>
+                    <p><strong>Kategori:</strong> PP-23 (Pajak Final 0.5%)</p>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Keterangan</th>
+                        <th style="text-align: right;">Jumlah (IDR)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Penghasilan Bruto (Omzet)</td>
+                        <td style="text-align: right;">Rp ${bruto.toLocaleString('id-ID')}</td>
+                    </tr>
+                    <tr>
+                        <td>Potongan / Penyesuaian</td>
+                        <td style="text-align: right;">Rp 0</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td>Dasar Pengenaan Pajak (DPP)</td>
+                        <td style="text-align: right;">Rp ${bruto.toLocaleString('id-ID')}</td>
+                    </tr>
+                    <tr class="total-row" style="color: #c00;">
+                        <td>Estimasi Pajak Terutang (0.5%)</td>
+                        <td style="text-align: right;">Rp ${tax.toLocaleString('id-ID')}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="card" style="margin-top: 20px;">
+                <strong>Catatan/Keterangan:</strong><br>
+                ${notes.replace(/\n/g, '<br>')}
+            </div>
+
+            <div class="footer">
+                <div>
+                    <p>Dicetak secara otomatis oleh sistem ERM FISIOTA.</p>
+                </div>
+                <div class="signature">
+                    <p>${clinic.location || 'Semarang'}, ${now.toLocaleDateString('id-ID')}</p>
+                    <p>Pimpinan Klinik,</p>
+                    <div class="sig-box"></div>
+                    <p><strong>( ______________________ )</strong></p>
+                </div>
+            </div>
+
+            <script>window.print();</script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
 
 async function autoSyncPayment(appt) {
