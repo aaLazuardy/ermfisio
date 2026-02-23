@@ -39,7 +39,7 @@ function getDataFromSheet(ss, sheetName) {
         let obj = {};
         headers.forEach((h, i) => {
             let val = row[i];
-            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
+            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
             if (h === 'time') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "HH:mm") : val;
             obj[h] = val;
         });
