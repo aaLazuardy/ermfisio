@@ -53,6 +53,10 @@ let selectedExercises = [];
 window.tempFormData = {};
 
 // --- 2. HELPER FUNCTIONS ---
+function today() {
+    return new Date().toISOString().slice(0, 10);
+}
+
 function calculateAge(dob) {
     if (!dob) return '-';
     const ageDifMs = Date.now() - new Date(dob).getTime();
