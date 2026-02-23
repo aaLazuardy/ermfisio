@@ -60,28 +60,8 @@ function today() {
     return new Date().toISOString().slice(0, 10);
 }
 
-function printHTML(content) {
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
+// Helper removed: Consolidated to section 17
 
-    iframe.contentWindow.document.write(content);
-    iframe.contentWindow.document.close();
-
-    // Tunggu sebentar agar render selesai
-    setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-        }, 1000);
-    }, 500);
-}
 
 function calculateAge(dob) {
     if (!dob) return '-';
@@ -2883,6 +2863,126 @@ function handlePrintWithTip() {
 
 function closePrintView() { navigate('assessments'); }
 
+function printHTML(html) {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+        iframe.contentWindow.print();
+        setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+}
+
+function generateReceiptHTML(apptId, type = 'RECEIPT') {
+    const a = (state.appointments || []).find(x => x.id === apptId);
+    if (!a) return '';
+    const p = (state.patients || []).find(pt => pt.id === a.patientId);
+    const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
+
+    const feeBase = Number(a.fee) || (p ? Number(p.defaultFee) : 0) || 0;
+    const discount = a.discount || 0;
+    const finalAmount = a.finalAmount !== undefined ? a.finalAmount : (feeBase - discount);
+    const method = a.paymentMethod || state._selectedPaymentMethod || 'Tunai';
+    const qrisImg = state.clinicInfo.qrisImage || '';
+
+    const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+    const now = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    return `
+    <html>
+    <head>
+        <style>
+            @page { margin: 0; size: 80mm auto; }
+            body { 
+                width: 72mm; margin: 0 auto; padding: 5mm 2mm;
+                font-family: 'Courier New', Courier, monospace; font-size: 10pt; line-height: 1.3; color: #000;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .bold { font-weight: bold; }
+            .uppercase { text-transform: uppercase; }
+            .dashed-line { border-top: 1px dashed #000; margin: 8px 0; }
+            .flex { display: flex; justify-content: space-between; align-items: flex-start; }
+            .clinic-name { font-size: 14pt; margin-bottom: 2px; }
+            .clinic-sub { font-size: 8pt; margin-bottom: 5px; }
+            .receipt-type { font-size: 11pt; padding: 5px 0; margin: 10px 0; border: 1px solid #000; background: #eee; -webkit-print-color-adjust: exact; }
+            .qr-container { margin: 15px 0; text-align: center; }
+            .qr-image { width: 50mm; height: 50mm; border: 1px solid #eee; padding: 1mm; background: #fff; }
+            .footer { font-size: 8pt; margin-top: 15px; }
+            .item-row { margin: 2px 0; }
+        </style>
+    </head>
+    <body onload="window.print()">
+        <div class="text-center">
+            <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
+            <div class="clinic-sub uppercase">${state.clinicInfo.subname || ''}</div>
+            <div style="font-size: 7pt; max-width: 90%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
+            <div style="font-size: 8pt;">WA: ${state.clinicInfo.phone || ''}</div>
+            
+            <div class="receipt-type bold uppercase">
+                ${type === 'BILL' ? 'Tagihan Pembayaran' : 'Kuitansi Pembayaran'}
+            </div>
+        </div>
+
+        <div style="font-size: 9pt;">
+            <div class="flex"><span>Tgl Cetak:</span> <span>${now}</span></div>
+            <div class="flex"><span>Pasien:</span> <span class="bold">${nama}</span></div>
+            <div class="flex"><span>Tgl Kunj:</span> <span>${a.date}</span></div>
+        </div>
+
+        <div class="dashed-line"></div>
+        
+        <div class="bold uppercase" style="font-size: 9pt; margin-bottom: 5px;">Rincian Layanan</div>
+        <div class="item-row flex">
+            <span style="max-width: 60%;">${a.diagnosis || 'Layanan Fisioterapi'}</span>
+            <span>${formatRp(feeBase)}</span>
+        </div>
+        
+        <div class="dashed-line"></div>
+        
+        <div class="flex"><span>Subtotal:</span> <span>${formatRp(feeBase)}</span></div>
+        ${discount > 0 ? `<div class="flex"><span>Diskon:</span> <span>-${formatRp(discount)}</span></div>` : ''}
+        <div class="flex bold" style="font-size: 12pt; margin-top: 8px;">
+            <span>TOTAL:</span>
+            <span>${formatRp(finalAmount)}</span>
+        </div>
+
+        <div class="dashed-line"></div>
+        
+        <div class="flex"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
+        <div class="flex"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
+
+        ${(type === 'BILL' && method === 'QRIS' && qrisImg) ? `
+            <div class="qr-container">
+                <p class="bold" style="font-size: 9pt; margin-bottom: 8px;">SCAN UNTUK BAYAR (QRIS)</p>
+                <img src="${qrisImg}" class="qr-image" />
+                <p style="font-size: 8pt; margin-top: 8px;">Silakan bayar senilai: <br> <span class="bold" style="font-size: 11pt;">${formatRp(finalAmount)}</span></p>
+                <p style="font-size: 7pt; color: #555;">Status akan divalidasi oleh admin</p>
+            </div>
+        ` : ''}
+
+        <div class="footer text-center">
+            ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 10pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 10pt;">BUKTI TAGIAN</p><p>Tunjukkan saat melakukan pembayaran</p>'}
+            <div class="dashed-line"></div>
+            <p style="font-size: 7pt;">E-Receipt by FISIOTA.com</p>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
 function generateSingleAssessmentHTML(a, p) {
     const conf = state.pdfConfig || {};
     const fontMap = { 'sans': 'ui-sans-serif, system-ui, sans-serif', 'serif': 'Georgia, "Times New Roman", serif', 'mono': 'ui-monospace, monospace' };
@@ -3981,7 +4081,7 @@ function renderKasirLaporan(formatRp) {
                                 <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Total</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
+                <tbody class="divide-y divide-slate-100">
                             ${displayed.map(a => {
                 const p = (state.patients || []).find(pt => pt.id === a.patientId);
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
@@ -3992,7 +4092,14 @@ function renderKasirLaporan(formatRp) {
                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="px-4 py-3 text-slate-500 text-xs">${paidDate}</td>
-                                    <td class="px-4 py-3 font-medium text-slate-800">${nama}</td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-slate-800">${nama}</span>
+                                            <button onclick="printReceipt('${a.id}', 'RECEIPT')" class="text-slate-300 hover:text-blue-600 transition-colors no-print" title="Cetak Struk">
+                                                <i data-lucide="printer" width="12"></i>
+                                            </button>
+                                        </div>
+                                    </td>
                                     <td class="px-4 py-3 text-slate-500 hidden md:table-cell text-xs">${terapis ? terapis.name : '-'}</td>
                                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${mc}">${a.paymentMethod || '-'}</span></td>
                                     <td class="px-4 py-3 text-right font-black text-slate-800">${formatRp(a.finalAmount || a.fee)}</td>
@@ -4053,6 +4160,10 @@ function openPaymentModal(apptId) {
     const qrisImg = state.clinicInfo.qrisImage || '';
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
+    // Reset temporary state for payment
+    state._selectedPaymentMethod = '';
+    state._currentDiscount = 0;
+
     const modal = document.getElementById('modal-container');
     const content = document.getElementById('modal-content');
     modal.classList.remove('hidden');
@@ -4063,34 +4174,43 @@ function openPaymentModal(apptId) {
                 <h3 class="text-xl font-bold text-slate-800">Proses Pembayaran</h3>
                 <p class="text-sm text-slate-500">${nama} &bull; ${a.time || ''} &bull; ${a.date}</p>
             </div>
-            <button onclick="closeModal()" class="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors">
-                <i data-lucide="x" width="20"></i>
-            </button>
+            <div class="flex items-center gap-2">
+                <button onclick="handleBillPrint('${apptId}')" 
+                    id="btn-print-bill"
+                    class="bg-slate-100 p-2 rounded-xl text-slate-600 hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-slate-200 group flex items-center gap-2 px-3" title="Cetak Tagihan">
+                    <i data-lucide="printer" width="18"></i>
+                    <span class="text-xs font-bold">Cetak Tagihan</span>
+                </button>
+                <button onclick="closeModal()" class="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors">
+                    <i data-lucide="x" width="20"></i>
+                </button>
+            </div>
         </div>
         <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1">
             <!-- Rincian -->
             <div class="bg-slate-50 rounded-xl p-4 space-y-2">
-                <div class="flex justify-between text-sm"><span class="text-slate-500">Biaya Sesi</span><span class="font-bold">${formatRp(feeBase)}</span></div>
+                <div class="flex justify-between text-sm"><span class="text-slate-500">Biaya Fisioterapi</span><span class="font-bold">${formatRp(feeBase)}</span></div>
                 <div class="flex justify-between text-sm items-center">
                     <span class="text-slate-500">Diskon (Rp)</span>
                     <input type="number" id="pm-discount" value="0" min="0" max="${feeBase}"
-                        oninput="updatePaymentTotal(${feeBase})"
+                        oninput="handlePaymentUpdate(${feeBase})"
                         class="w-32 text-right border-2 border-slate-200 rounded-lg px-2 py-1 text-sm focus:border-blue-500 outline-none">
                 </div>
                 <div class="border-t border-slate-200 pt-2 flex justify-between font-bold text-base">
-                    <span>TOTAL BAYAR</span>
+                    <span>TOTAL TAGIHAN</span>
                     <span id="pm-total" class="text-blue-600">${formatRp(feeBase)}</span>
                 </div>
             </div>
 
             <!-- Pilih Metode -->
             <div>
-                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Metode Pembayaran</p>
+                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
                 <div class="grid grid-cols-4 gap-2" id="pm-method-group">
                     ${['Tunai', 'Transfer', 'QRIS', 'BPJS'].map(m => `
                     <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
                         class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
-                        ${m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}<br>${m}
+                        <div class="text-xl mb-1">${m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
+                        <div class="text-[10px] uppercase">${m}</div>
                     </button>`).join('')}
                 </div>
             </div>
@@ -4102,20 +4222,45 @@ function openPaymentModal(apptId) {
             : `<div class="w-48 h-48 mx-auto bg-white rounded-xl border-2 border-dashed border-purple-300 flex items-center justify-center text-slate-400 text-sm">
                             <div class="text-center"><i data-lucide="qr-code" width="48" class="mx-auto mb-2 text-purple-300"></i><p>QR belum diupload</p><p class="text-xs">Upload di menu Konfigurasi</p></div>
                        </div>`}
-                <p class="text-purple-700 font-bold mt-3 text-sm">Scan QR, lalu transfer nominal:</p>
+                <p class="text-purple-700 font-bold mt-3 text-sm">Silakan Scan QRIS:</p>
                 <p class="text-2xl font-black text-purple-800" id="pm-qris-nominal">${formatRp(feeBase)}</p>
-                <p class="text-xs text-purple-500 mt-1">Konfirmasi setelah pasien transfer</p>
+                <p class="text-xs text-purple-500 mt-1 italic">Scan QR, masukkan nominal & konfirmasi</p>
             </div>
         </div>
         <div class="px-6 py-4 border-t bg-slate-50 sticky bottom-0">
             <button onclick="confirmPayment('${apptId}')"
                 id="pm-confirm-btn"
-                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl text-base transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl text-base transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed group flex items-center justify-center gap-2"
                 disabled>
-                <i data-lucide="check-circle" width="20" class="inline mr-2"></i> Konfirmasi Lunas
+                <i data-lucide="check-circle" width="20"></i> 
+                <span>Konfirmasi Lunas</span>
             </button>
-            <p class="text-xs text-slate-400 text-center mt-2">Pilih metode pembayaran terlebih dahulu</p>
+            <p class="text-xs text-slate-400 text-center mt-2" id="pm-help-text">Pilih metode pembayaran terlebih dahulu</p>
         </div>`;
+
+    // Global helper for this modal
+    window.handlePaymentUpdate = (fee) => {
+        const disc = Number(document.getElementById('pm-discount')?.value) || 0;
+        state._currentDiscount = disc;
+        updatePaymentTotal(fee);
+    };
+
+    window.handleBillPrint = (aid) => {
+        const a = (state.appointments || []).find(x => x.id === aid);
+        if (a) {
+            // Temporarily set discount/finalAmount for receipt generation if not confirmed yet
+            const oldD = a.discount;
+            const oldF = a.finalAmount;
+            a.discount = state._currentDiscount || 0;
+            a.finalAmount = parseRp(a.fee) - a.discount;
+
+            printReceipt(aid, 'BILL');
+
+            // Restore (optional, as confirmPayment will overwrite anyway)
+            a.discount = oldD;
+            a.finalAmount = oldF;
+        }
+    };
 
     renderIcons();
 }
@@ -4137,8 +4282,8 @@ function selectPaymentMethod(method) {
     const btn = document.getElementById('pm-confirm-btn');
     if (btn) {
         btn.disabled = false;
-        const next = btn.nextElementSibling;
-        if (next) next.textContent = `Bayar via ${method}`;
+        const help = document.getElementById('pm-help-text');
+        if (help) help.textContent = `Bayar via ${method}`;
     }
 }
 
@@ -4172,11 +4317,39 @@ async function confirmPayment(apptId) {
     a.updatedAt = new Date().toISOString();
 
     saveData();
-    closeModal();
+
+    // UI Feedback Sukses & Opsi Cetak
+    const content = document.getElementById('modal-content');
+    content.innerHTML = `
+        <div class="p-10 text-center space-y-6">
+            <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 animate-bounce">
+                <i data-lucide="check-circle" width="48"></i>
+            </div>
+            <div>
+                <h3 class="text-2xl font-black text-slate-800">Pembayaran Berhasil!</h3>
+                <p class="text-slate-500 mt-2">Data transaksi untuk <b>${(state.patients || []).find(p => p.id === a.patientId)?.name || 'Pasien'}</b> telah disimpan.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-4">
+                <button onclick="printReceipt('${apptId}', 'RECEIPT')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
+                    <i data-lucide="printer" width="20"></i> Cetak Struk
+                </button>
+                <button onclick="closeModal()" class="bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-4 rounded-2xl transition-all active:scale-95">
+                    Selesai
+                </button>
+            </div>
+        </div>
+    `;
+    lucide.createIcons();
+
     renderKasirView(document.getElementById('main-content'));
 
     // Try to sync instantly
     autoSyncPayment(a);
+}
+
+function printReceipt(apptId, type) {
+    const html = generateReceiptHTML(apptId, type);
+    if (html) printHTML(html);
 }
 
 function renderKasirPajak(formatRp) {
