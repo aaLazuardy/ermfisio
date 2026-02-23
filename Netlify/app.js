@@ -776,9 +776,9 @@ function renderDashboard(container) {
     const today = new Date().toISOString().slice(0, 10);
     const todayAppointments = state.appointments.filter(a => a.date === today);
     const todayIncome = (state.appointments || [])
-        .filter(a => a.paymentStatus === 'PAID' && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today)
+        .filter(a => a.paymentStatus && a.paymentStatus.toUpperCase() === 'PAID' && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today)
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
-    const unpaidToday = (state.appointments || []).filter(a => a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID').length;
+    const unpaidToday = (state.appointments || []).filter(a => a.date === today && a.status === 'CONFIRMED' && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
 
     container.innerHTML = `
@@ -3367,12 +3367,12 @@ function switchKasirTab(tab) {
 
 function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
-    const antrian = state.appointments.filter(a =>
-        a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID'
-    ).sort((a, b) => a.time.localeCompare(b.time));
+    const antrian = (state.appointments || []).filter(a =>
+        a.date === today && a.status === 'CONFIRMED' && (a.paymentStatus || '').toUpperCase() !== 'PAID'
+    ).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
-    const lunas = state.appointments.filter(a =>
-        a.date === today && a.paymentStatus === 'PAID'
+    const lunas = (state.appointments || []).filter(a =>
+        a.date === today && (a.paymentStatus || '').toUpperCase() === 'PAID'
     ).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || ''));
 
     const totalLunasHariIni = lunas.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
@@ -3473,7 +3473,7 @@ function renderKasirLaporan(formatRp) {
     const savedTo = state.laporanTo || defaultTo;
 
     const filtered = (state.appointments || []).filter(a =>
-        a.paymentStatus === 'PAID' &&
+        (a.paymentStatus || '').toUpperCase() === 'PAID' &&
         (a.paidAt || a.date) &&
         (a.paidAt || a.date).slice(0, 10) >= savedFrom &&
         (a.paidAt || a.date).slice(0, 10) <= savedTo
@@ -3568,9 +3568,14 @@ function renderKasirLaporan(formatRp) {
                 <h3 class="font-bold text-slate-800">Detail Transaksi</h3>
             </div>
             ${filtered.length === 0
-            ? `<div class="p-8 text-center text-slate-400">
-                        <i data-lucide="search-x" width="36" class="mx-auto mb-2"></i>
-                        <p>Tidak ada transaksi di rentang ini</p>
+            ? `<div class="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-100 rounded-2xl mx-6 mb-6">
+                        <i data-lucide="info" width="48" class="mx-auto mb-4 text-slate-300"></i>
+                        <h4 class="text-slate-600 font-bold text-lg mb-1">Belum Ada Transaksi</h4>
+                        <p class="text-sm max-w-sm mx-auto mb-6">Hanya janji temu yang sudah <b>dikonfirmasi</b> dan <b>dibayar</b> (status LUNAS) yang muncul di laporan ini.</p>
+                        <div class="flex justify-center gap-3">
+                            <button onclick="switchKasirTab('antrian')" class="bg-white border border-slate-200 px-4 py-2 rounded-lg text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-all">Cek Antrian Hari Ini</button>
+                            <button onclick="pullDataFromSheet()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-blue-700 transition-all flex items-center gap-1"><i data-lucide="refresh-cw" width="12"></i> Tarik Data Terbaru</button>
+                        </div>
                    </div>`
             : `<div class="overflow-x-auto">
                     <table class="w-full text-sm">
