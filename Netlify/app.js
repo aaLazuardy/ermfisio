@@ -2891,7 +2891,8 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     const p = (state.patients || []).find(pt => pt.id === a.patientId);
     const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
 
-    const feeBase = Number(a.fee) || (p ? Number(p.defaultFee) : 0) || 0;
+    // FIX: Use parseRp to handle formatted strings from state
+    const feeBase = parseRp(a.fee) || (p ? parseRp(p.defaultFee) : 0) || 0;
     const discount = a.discount || 0;
     const finalAmount = a.finalAmount !== undefined ? a.finalAmount : (feeBase - discount);
     const method = a.paymentMethod || state._selectedPaymentMethod || 'Tunai';
@@ -2904,10 +2905,14 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     <html>
     <head>
         <style>
-            @page { margin: 0; size: 80mm auto; }
+            @page { margin: 0; size: 58mm auto; }
             body { 
-                width: 72mm; margin: 0 auto; padding: 5mm 2mm;
-                font-family: 'Courier New', Courier, monospace; font-size: 10pt; line-height: 1.3; color: #000;
+                width: 54mm; margin: 0; padding: 4mm 2mm;
+                font-family: 'Courier New', Courier, monospace; font-size: 9pt; line-height: 1.2; color: #000;
+                background: #fff;
+            }
+            @media print {
+                body { width: 54mm; margin: 0; padding: 2mm; }
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
