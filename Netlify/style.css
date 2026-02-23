@@ -141,11 +141,11 @@
 /* Responsif Kertas di HP */
 @media screen and (max-width: 768px) {
   .print-page-wrapper {
-    width: 95%;
-    margin: 20px auto;
-    padding: 10mm;
+    width: 98%;
+    margin: 10px auto;
+    padding: 20px 15px;
     min-height: auto;
-    /* Di HP biarkan panjangnya otomatis */
+    font-size: 10pt;
   }
 }
 
