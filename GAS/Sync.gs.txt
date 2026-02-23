@@ -157,7 +157,8 @@ function checkAndFixColumns(ss) {
         { name: SHEET_NAMES.PATIENTS, headers: HEADERS.PATIENTS },
         { name: SHEET_NAMES.ASSESSMENTS, headers: HEADERS.ASSESSMENTS },
         { name: SHEET_NAMES.APPOINTMENTS, headers: HEADERS.APPOINTMENTS },
-        { name: SHEET_NAMES.CONFIG, headers: HEADERS.CONFIG }
+        { name: SHEET_NAMES.CONFIG, headers: HEADERS.CONFIG },
+        { name: SHEET_NAMES.EXPENSES, headers: HEADERS.EXPENSES }
     ];
 
     let logs = [];

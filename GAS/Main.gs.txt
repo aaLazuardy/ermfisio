@@ -14,7 +14,8 @@ const SHEET_NAMES = {
     ASSESSMENTS: "Assessments",
     APPOINTMENTS: "Appointments",
     CONFIG: "Config",
-    LICENSES: "Licenses"
+    LICENSES: "Licenses",
+    EXPENSES: "Expenses"
 };
 
 const HEADERS = {
@@ -22,7 +23,8 @@ const HEADERS = {
     ASSESSMENTS: ['id', 'patientId', 'date', 'diagnosis', 'icd', 'icf_codes', 'custom_assessment', 'vas', 'fee', 'b', 's', 'd_act', 'd_part', 'obj', 'intervention', 'eval', 'plan', 'templateDefaults', 'bodyChart', 'pain_points', 'updatedAt'],
     APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'paymentStatus', 'paymentMethod', 'discount', 'finalAmount', 'paidAt', 'updatedAt'],
     CONFIG: ['key', 'value', 'updated_at'],
-    LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours']
+    LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours'],
+    EXPENSES: ['id', 'date', 'category', 'amount', 'notes', 'updatedAt']
 };
 
 // --- 2. MENU & SIDEBAR ---
@@ -101,6 +103,7 @@ function doGet(e) {
             patients: getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
             assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
             appointments: getDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS),
+            expenses: getDataFromSheet(ss, SHEET_NAMES.EXPENSES),
             config: getDataFromSheet(ss, SHEET_NAMES.CONFIG)
         });
     }
@@ -203,6 +206,7 @@ function doPost(e) {
                 if (data.patients) saveDataFixed(ss, SHEET_NAMES.PATIENTS, data.patients, HEADERS.PATIENTS);
                 if (data.assessments) saveDataFixed(ss, SHEET_NAMES.ASSESSMENTS, data.assessments, HEADERS.ASSESSMENTS);
                 if (data.appointments) saveDataFixed(ss, SHEET_NAMES.APPOINTMENTS, data.appointments, HEADERS.APPOINTMENTS);
+                if (data.expenses) saveDataFixed(ss, SHEET_NAMES.EXPENSES, data.expenses, HEADERS.EXPENSES);
                 if (data.config) updateConfigSheet(ss, data.config);
                 return createJSONOutput({ status: "success" });
             }
