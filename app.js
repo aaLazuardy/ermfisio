@@ -21,6 +21,8 @@ let state = {
     currentAssessment: null,
     scriptUrl: '',
     filterPatientId: null,
+    laporanLimit: 50,
+    laporanSearch: '',
     calendarDate: new Date(),
     pdfConfig: {
         layoutMode: 'normal',
@@ -3784,9 +3786,24 @@ function renderKasirLaporan(formatRp) {
     const totalExpense = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const netProfit = totalIncome - totalExpense;
 
-    // Group by date for per-hari view
+    // Filter by search key if any (Live Search)
+    let searchResult = filtered;
+    if (state.laporanSearch) {
+        const key = state.laporanSearch.toLowerCase();
+        searchResult = filtered.filter(a => {
+            const p = (state.patients || []).find(pt => pt.id === a.patientId);
+            const nama = (p ? p.name : (a.visitor_name || a.name || '')).toLowerCase();
+            return nama.includes(key);
+        });
+    }
+
+    // Slice by limit for pagination
+    const displayed = searchResult.slice(0, state.laporanLimit || 50);
+    const hasMore = searchResult.length > (state.laporanLimit || 50);
+
+    // Group by date for per-hari view (using full searchResult instead of just displayed)
     const byDate = {};
-    filtered.forEach(a => {
+    searchResult.forEach(a => {
         const d = a.paidAt ? a.paidAt.slice(0, 10) : a.date;
         if (!byDate[d]) byDate[d] = { count: 0, total: 0 };
         byDate[d].count++;
@@ -3927,8 +3944,21 @@ function renderKasirLaporan(formatRp) {
 
         <!-- Tabel Detail -->
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
-            <div class="px-6 py-4 border-b border-slate-100">
+            <div class="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h3 class="font-bold text-slate-800">Detail Transaksi</h3>
+                <div class="relative w-full md:w-72 group">
+                    <input type="text" placeholder="Cari nama pasien..." id="laporan-search-input"
+                        value="${state.laporanSearch || ''}"
+                        onkeyup="event.key === 'Enter' ? searchLaporan() : null"
+                        class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-10 pr-10 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition-all">
+                    <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" width="16"></i>
+                    ${state.laporanSearch ? `
+                        <button onclick="clearLaporanSearch()" class="absolute right-3 top-1/2 -translate-y-1/2 bg-slate-200 hover:bg-rose-500 hover:text-white text-slate-500 rounded-full p-1 transition-all">
+                            <i data-lucide="x" width="12"></i>
+                        </button>` : `
+                        <button onclick="searchLaporan()" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1 text-[10px] font-bold shadow-sm transition-all">Cari</button>
+                    `}
+                </div>
             </div>
             ${filtered.length === 0
             ? `<div class="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-100 rounded-2xl mx-6 mb-6">
@@ -3952,7 +3982,7 @@ function renderKasirLaporan(formatRp) {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                            ${filtered.map(a => {
+                            ${displayed.map(a => {
                 const p = (state.patients || []).find(pt => pt.id === a.patientId);
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
                 const terapis = (state.users || []).find(u => u.id === a.therapistId);
@@ -3963,16 +3993,44 @@ function renderKasirLaporan(formatRp) {
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="px-4 py-3 text-slate-500 text-xs">${paidDate}</td>
                                     <td class="px-4 py-3 font-medium text-slate-800">${nama}</td>
-                                    <td class="px-4 py-3 text-slate-500 hidden md:table-cell">${terapis ? terapis.name : '-'}</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-bold ${mc}">${a.paymentMethod || '-'}</span></td>
-                                    <td class="px-4 py-3 text-right font-bold text-slate-800">${formatRp(a.finalAmount || a.fee)}</td>
+                                    <td class="px-4 py-3 text-slate-500 hidden md:table-cell text-xs">${terapis ? terapis.name : '-'}</td>
+                                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${mc}">${a.paymentMethod || '-'}</span></td>
+                                    <td class="px-4 py-3 text-right font-black text-slate-800">${formatRp(a.finalAmount || a.fee)}</td>
                                 </tr>`;
             }).join('')}
                         </tbody>
                     </table>
+                    ${hasMore ? `
+                    <div class="p-6 bg-slate-50 border-t border-slate-100 text-center">
+                        <button onclick="loadMoreLaporan()" class="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl text-xs font-black text-blue-600 shadow-sm hover:shadow-md hover:bg-blue-50 transition-all active:scale-95">
+                            Tampilkan 50 Transaksi Berikutnya
+                        </button>
+                        <p class="text-[10px] font-bold text-slate-400 mt-3 uppercase tracking-wider">Menampilkan ${displayed.length} dari ${searchResult.length} transaksi ditemukan</p>
+                    </div>` : ''}
                    </div>`}
         </div>
     `;
+}
+
+function searchLaporan() {
+    const val = document.getElementById('laporan-search-input')?.value || '';
+    state.laporanSearch = val;
+    state.laporanLimit = 50; // Reset limit on search
+    renderKasirView(document.getElementById('main-content'));
+    renderIcons();
+}
+
+function clearLaporanSearch() {
+    state.laporanSearch = '';
+    state.laporanLimit = 50;
+    renderKasirView(document.getElementById('main-content'));
+    renderIcons();
+}
+
+function loadMoreLaporan() {
+    state.laporanLimit = (state.laporanLimit || 50) + 50;
+    renderKasirView(document.getElementById('main-content'));
+    renderIcons();
 }
 
 function applyLaporanFilter() {
