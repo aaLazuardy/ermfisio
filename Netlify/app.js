@@ -2891,10 +2891,12 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     const p = (state.patients || []).find(pt => pt.id === a.patientId);
     const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
 
-    // FIX: Use parseRp to handle formatted strings from state
+    // FIX: Always use parseRp for any currency values from state/data
     const feeBase = parseRp(a.fee) || (p ? parseRp(p.defaultFee) : 0) || 0;
-    const discount = a.discount || 0;
-    const finalAmount = a.finalAmount !== undefined ? a.finalAmount : (feeBase - discount);
+    const discount = parseRp(a.discount) || 0;
+    // Handle both property existence and numeric validity
+    let finalAmount = a.finalAmount !== undefined ? parseRp(a.finalAmount) : (feeBase - discount);
+
     const method = a.paymentMethod || state._selectedPaymentMethod || 'Tunai';
     const qrisImg = state.clinicInfo.qrisImage || '';
 
@@ -2906,13 +2908,15 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     <head>
         <style>
             @page { margin: 0; size: 58mm auto; }
+            * { box-sizing: border-box; }
             body { 
-                width: 54mm; margin: 0; padding: 4mm 2mm;
+                width: 58mm !important; margin: 0; padding: 4mm 2mm;
                 font-family: 'Courier New', Courier, monospace; font-size: 9pt; line-height: 1.2; color: #000;
                 background: #fff;
             }
             @media print {
-                body { width: 54mm; margin: 0; padding: 2mm; }
+                html, body { width: 58mm; }
+                body { margin: 0; padding: 2mm; }
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
