@@ -14,6 +14,7 @@ let state = {
     patients: [],
     assessments: [],
     appointments: [],
+    expenses: [],
     printSelection: [],
     currentView: 'login',
     selectedPatient: null,
@@ -153,6 +154,7 @@ function loadData() {
         state.patients = JSON.parse(localStorage.getItem('erm_patients')) || [];
         state.assessments = JSON.parse(localStorage.getItem('erm_assessments')) || [];
         state.appointments = JSON.parse(localStorage.getItem('erm_appointments')) || [];
+        state.expenses = JSON.parse(localStorage.getItem('erm_expenses')) || [];
         state.users = JSON.parse(localStorage.getItem('erm_users')) || [];
 
         // Jika user kosong (pertama kali), buat default
@@ -173,6 +175,7 @@ function loadData() {
         ensureTs(state.patients);
         ensureTs(state.assessments);
         ensureTs(state.appointments);
+        ensureTs(state.expenses);
 
         // --- MIGRATION: Sanitize Array Fields ---
         // Field seperti pain_points, intervention, b, s, dll bisa tersimpan
@@ -450,6 +453,7 @@ function saveData() {
     localStorage.setItem('erm_patients', JSON.stringify(state.patients));
     localStorage.setItem('erm_assessments', JSON.stringify(state.assessments));
     localStorage.setItem('erm_appointments', JSON.stringify(state.appointments));
+    localStorage.setItem('erm_expenses', JSON.stringify(state.expenses || []));
 }
 
 // Sanitize assessments: pastikan semua field array benar-benar array
@@ -601,6 +605,7 @@ async function pushDataToSheet() {
                 patients: ensureTs(state.patients),
                 assessments: ensureTs(state.assessments),
                 appointments: ensureTs(state.appointments),
+                expenses: ensureTs(state.expenses || []),
                 config: state.clinicInfo ? [{ key: 'clinic_info', value: JSON.stringify(state.clinicInfo) }] : []
             })
         });
@@ -642,6 +647,7 @@ async function pullDataFromSheet() {
             state.patients = data.patients;
             state.assessments = sanitizeAssessments(data.assessments);
             if (data.appointments) state.appointments = data.appointments;
+            if (data.expenses) state.expenses = data.expenses;
 
             // Sync Config if available
             if (data.config && Array.isArray(data.config)) {
@@ -3437,22 +3443,28 @@ function renderKasirView(container) {
             <!-- Tab Header -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-1 flex gap-1">
                 <button onclick="switchKasirTab('antrian')" id="ktab-antrian"
-                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'antrian' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
-                    <i data-lucide="clock" width="14" class="inline mr-1"></i> Antrian Hari Ini
+                    class="flex-1 py-2.5 px-4 rounded-xl text-[11px] md:text-sm font-bold transition-all ${tab === 'antrian' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="clock" width="14" class="inline mr-1"></i> Antrian
+                </button>
+                <button onclick="switchKasirTab('pengeluaran')" id="ktab-pengeluaran"
+                    class="flex-1 py-2.5 px-4 rounded-xl text-[11px] md:text-sm font-bold transition-all ${tab === 'pengeluaran' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="shopping-cart" width="14" class="inline mr-1"></i> Pengeluaran
                 </button>
                 <button onclick="switchKasirTab('laporan')" id="ktab-laporan"
-                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'laporan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
-                    <i data-lucide="bar-chart-2" width="14" class="inline mr-1"></i> Laporan Keuangan
+                    class="flex-1 py-2.5 px-4 rounded-xl text-[11px] md:text-sm font-bold transition-all ${tab === 'laporan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="bar-chart-2" width="14" class="inline mr-1"></i> Keuangan
                 </button>
                 <button onclick="switchKasirTab('pajak')" id="ktab-pajak"
-                    class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${tab === 'pajak' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
-                    <i data-lucide="file-text" width="14" class="inline mr-1"></i> Laporan Pajak
+                    class="flex-1 py-2.5 px-4 rounded-xl text-[11px] md:text-sm font-bold transition-all ${tab === 'pajak' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}">
+                    <i data-lucide="file-text" width="14" class="inline mr-1"></i> Pajak
                 </button>
             </div>
 
             <!-- Tab Content -->
             <div id="kasir-tab-content">
-                ${tab === 'antrian' ? renderKasirAntrian(formatRp) : (tab === 'pajak' ? renderKasirPajak(formatRp) : renderKasirLaporan(formatRp))}
+                ${tab === 'antrian' ? renderKasirAntrian(formatRp) :
+            (tab === 'pengeluaran' ? renderKasirPengeluaran(formatRp) :
+                (tab === 'pajak' ? renderKasirPajak(formatRp) : renderKasirLaporan(formatRp)))}
             </div>
         </div>`;
     renderIcons();
@@ -3574,6 +3586,173 @@ function renderKasirAntrian(formatRp) {
     `;
 }
 
+function renderKasirPengeluaran(formatRp) {
+    const now = new Date();
+    const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM
+
+    // Default filter harian bulan ini
+    const filtered = (state.expenses || []).filter(e => e.date && e.date.slice(0, 7) === currentMonth)
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+    const total = filtered.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+    return `
+        <div class="space-y-6 fade-in shadow-inner-lg p-1">
+            <!-- Summary Expense -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Biaya Operasional</p>
+                    <p class="text-2xl font-black text-rose-600 mt-1">${formatRp(total)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1 uppercase">Bulan: ${now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
+                </div>
+                <button onclick="openExpenseModal()" 
+                    class="w-full md:w-auto bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2">
+                    <i data-lucide="plus-circle" width="18"></i> Catat Pengeluaran
+                </button>
+            </div>
+
+            <!-- List Pengeluaran -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="list" width="18" class="text-slate-400"></i>
+                        Riwayat Pengeluaran
+                    </h3>
+                </div>
+                ${filtered.length === 0
+            ? `<div class="p-16 text-center text-slate-300">
+                    <i data-lucide="shopping-bag" width="48" class="mx-auto mb-4 opacity-20"></i>
+                    <p class="font-medium">Belum ada catatan pengeluaran bulan ini.</p>
+                   </div>`
+            : `<div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="text-left px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Tanggal</th>
+                                <th class="text-left px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Kategori</th>
+                                <th class="text-left px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Catatan</th>
+                                <th class="text-right px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Nominal</th>
+                                <th class="text-center px-6 py-3" style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            ${filtered.map(e => `
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-6 py-4 text-slate-600 font-medium">${e.date}</td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold uppercase">${e.category || 'LAINNYA'}</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-slate-400 text-xs italic">${e.notes || '-'}</td>
+                                    <td class="px-6 py-4 text-right font-black text-rose-600">${formatRp(e.amount)}</td>
+                                    <td class="px-6 py-4 text-center">
+                                        <button onclick="deleteExpense('${e.id}')" class="text-slate-300 hover:text-rose-500 transition-colors">
+                                            <i data-lucide="trash-2" width="16"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                   </div>`}
+            </div>
+        </div>
+    `;
+}
+
+function openExpenseModal() {
+    const modal = document.getElementById('modal-container');
+    const content = document.getElementById('modal-content');
+    modal.classList.remove('hidden');
+
+    content.innerHTML = `
+        <div class="bg-white px-6 py-4 border-b flex justify-between items-center sticky top-0 z-20">
+            <div>
+                <h3 class="text-xl font-bold text-slate-800">Tambah Pengeluaran</h3>
+                <p class="text-xs text-slate-400">Pencatatan biaya operasional harian</p>
+            </div>
+            <button onclick="closeModal()" class="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors">
+                <i data-lucide="x" width="20"></i>
+            </button>
+        </div>
+        <div class="px-6 py-6 space-y-5 overflow-y-auto max-h-[80vh]">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Tanggal Pengeluaran</label>
+                <input type="date" id="exp-date" value="${today()}" 
+                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-semibold outline-none focus:border-blue-500 transition-all">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Kategori Biaya</label>
+                <select id="exp-category" class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-blue-500 transition-all">
+                    <option value="Operasional">Operasional (Listrik, Air, Internet)</option>
+                    <option value="Alat Medis">Alat Medis & Bahan Habis Pakai</option>
+                    <option value="Gaji">Gaji / Honor Terapis</option>
+                    <option value="Sewa">Sewa Tempat / Maintenance</option>
+                    <option value="Lainnya">Lainnya / Non-Operasional</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Nominal (Rp)</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 font-black text-rose-400">Rp</span>
+                    <input type="number" id="exp-amount" placeholder="0"
+                        class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-4 py-4 text-xl font-black text-rose-600 outline-none focus:border-rose-500 focus:bg-white transition-all">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Detail / Keterangan</label>
+                <textarea id="exp-notes" placeholder="Tulis rincian pengeluaran di sini..."
+                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-sm outline-none focus:border-blue-500 focus:bg-white transition-all min-h-[100px]"></textarea>
+            </div>
+            
+            <div class="pt-2">
+                <button onclick="saveExpense()"
+                    class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-4 rounded-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 group">
+                    <i data-lucide="save" width="20" class="group-hover:rotate-12 transition-transform"></i>
+                    Simpan Data Pengeluaran
+                </button>
+            </div>
+        </div>
+    `;
+    renderIcons();
+}
+
+function saveExpense() {
+    const date = document.getElementById('exp-date').value;
+    const category = document.getElementById('exp-category').value;
+    const amount = Number(document.getElementById('exp-amount').value) || 0;
+    const notes = document.getElementById('exp-notes').value;
+
+    if (amount <= 0) {
+        alert('Mohon masukkan nominal belanja/pengeluaran!');
+        return;
+    }
+
+    const entry = {
+        id: 'EXP-' + Date.now(),
+        date,
+        category,
+        amount,
+        notes,
+        updatedAt: new Date().toISOString()
+    };
+
+    if (!Array.isArray(state.expenses)) state.expenses = [];
+    state.expenses.push(entry);
+
+    saveData();
+    closeModal();
+    renderKasirView(document.getElementById('main-content'));
+    showToast("Catatan pengeluaran berhasil disimpan.");
+}
+
+function deleteExpense(id) {
+    if (!confirm('Hapus selamanya catatan pengeluaran ini?')) return;
+    state.expenses = (state.expenses || []).filter(e => e.id !== id);
+    saveData();
+    renderKasirView(document.getElementById('main-content'));
+    showToast("Data pengeluaran dihapus.");
+}
+
 function renderKasirLaporan(formatRp) {
     // Default range: bulan ini
     const now = new Date();
@@ -3590,12 +3769,20 @@ function renderKasirLaporan(formatRp) {
         return (isPaid || isLegacyPaid) && dateMatch;
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
-    const total = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
+    const totalIncome = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
     const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
     filtered.forEach(a => {
         const m = a.paymentMethod || 'Tunai';
         byMethod[m] = (byMethod[m] || 0) + (parseRp(a.finalAmount) || parseRp(a.fee) || 0);
     });
+
+    // Kalkulasi Pengeluaran dalam rentang tanggal yang sama
+    const filteredExpenses = (state.expenses || []).filter(e => {
+        const d = (e.date || '');
+        return d >= savedFrom && d <= savedTo;
+    });
+    const totalExpense = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const netProfit = totalIncome - totalExpense;
 
     // Group by date for per-hari view
     const byDate = {};
@@ -3635,29 +3822,86 @@ function renderKasirLaporan(formatRp) {
             </div>
         </div>
 
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div class="md:col-span-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white shadow-lg">
-                <p class="text-blue-200 text-xs font-bold uppercase">Total Pemasukan</p>
-                <p class="text-2xl font-black mt-1 truncate">${formatRp(total)}</p>
-                <p class="text-blue-200 text-xs mt-1">${filtered.length} transaksi</p>
+        <!-- Summary Stats (Dashboard Arus Kas) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 shadow-sm">
+            <div class="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 relative overflow-hidden">
+                <div class="flex justify-between items-start relative z-10">
+                    <div>
+                        <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Pemasukan</p>
+                        <p class="text-3xl font-black text-emerald-800 mt-2">${formatRp(totalIncome)}</p>
+                        <p class="text-[10px] text-emerald-600/60 mt-2 uppercase font-bold">${filtered.length} Transaksi Pasien</p>
+                    </div>
+                    <div class="bg-white/50 p-2.5 rounded-2xl shadow-sm border border-emerald-100/50">
+                        <i data-lucide="trending-up" class="text-emerald-600" width="20"></i>
+                    </div>
+                </div>
+                <div class="absolute -right-4 -bottom-4 opacity-5 rotate-12">
+                   <i data-lucide="arrow-up-right" width="100"></i>
+                </div>
             </div>
-            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                <p class="text-lg font-black text-slate-700">💵</p>
-                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.Tunai)}</p>
-                <p class="text-xs text-slate-400">Tunai</p>
+
+            <div class="bg-rose-50 border border-rose-100 rounded-3xl p-6 relative overflow-hidden">
+                <div class="flex justify-between items-start relative z-10">
+                    <div>
+                        <p class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Total Pengeluaran</p>
+                        <p class="text-3xl font-black text-rose-800 mt-2">${formatRp(totalExpense)}</p>
+                        <div class="mt-2 flex items-center gap-2">
+                             <span class="text-[10px] text-rose-600/60 uppercase font-bold">${filteredExpenses.length} Catatan Biaya</span>
+                             <button onclick="switchKasirTab('pengeluaran'); openExpenseModal();" 
+                                class="text-[9px] bg-rose-600 text-white px-2 py-0.5 rounded-lg font-bold hover:bg-rose-700 transition-colors uppercase">
+                                + Catat Baru
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-white/50 p-2.5 rounded-2xl shadow-sm border border-rose-100/50">
+                        <i data-lucide="trending-down" class="text-rose-600" width="20"></i>
+                    </div>
+                </div>
+                <div class="absolute -right-4 -bottom-4 opacity-5 -rotate-12">
+                   <i data-lucide="arrow-down-left" width="100"></i>
+                </div>
             </div>
-            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                <p class="text-lg font-black text-slate-700">🏦</p>
-                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.Transfer)}</p>
-                <p class="text-xs text-slate-400">Transfer</p>
-            </div>
-            <div class="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                <p class="text-lg font-black text-slate-700">📱</p>
-                <p class="text-sm font-bold text-slate-700 mt-1">${formatRp(byMethod.QRIS)}</p>
-                <p class="text-xs text-slate-400">QRIS</p>
+
+            <div class="bg-blue-600 rounded-3xl p-6 shadow-xl shadow-blue-200 ring-4 ring-blue-50 relative overflow-hidden">
+                <div class="flex justify-between items-start relative z-10">
+                    <div>
+                        <p class="text-[10px] font-black text-blue-100 uppercase tracking-widest">Saldo Bersih (Net Profit)</p>
+                        <p class="text-3xl font-black text-white mt-1 shadow-sm">${formatRp(netProfit)}</p>
+                        <p class="text-[10px] text-blue-100 mt-2 font-black italic tracking-widest bg-blue-500/50 inline-block px-2 py-0.5 rounded-lg border border-white/10 uppercase">Arus Kas Masuk</p>
+                    </div>
+                    <div class="bg-white/20 p-2.5 rounded-2xl border border-white/20">
+                        <i data-lucide="wallet" class="text-white" width="20"></i>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Pemasukan Per Metode -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="pie-chart" width="18" class="text-blue-500"></i>
+                        Metode Pembayaran
+                    </h3>
+                </div>
+                <div class="space-y-4">
+                    ${Object.entries(byMethod).sort((a, b) => b[1] - a[1]).map(([m, v]) => {
+        const pct = totalIncome > 0 ? (v / totalIncome) * 100 : 0;
+        const colors = { Tunai: 'bg-emerald-500 shadow-emerald-100', Transfer: 'bg-blue-500 shadow-blue-100', QRIS: 'bg-indigo-500 shadow-indigo-100', BPJS: 'bg-orange-500 shadow-orange-100' };
+        return `
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-2 font-black uppercase tracking-tight">
+                                <span class="text-slate-500">${m}</span>
+                                <span class="text-slate-800">${formatRp(v)} <span class="text-slate-400 font-medium">(${pct.toFixed(0)}%)</span></span>
+                            </div>
+                            <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div class="${colors[m] || 'bg-slate-400'} h-full transition-all duration-1000 shadow-sm" style="width: ${pct}%"></div>
+                            </div>
+                        </div>`;
+    }).join('')}
+                </div>
+            </div>
 
         <!-- Per Hari -->
         ${Object.keys(byDate).length > 0 ? `
