@@ -4021,21 +4021,30 @@ function printJournalReport(mode = 'GENERAL') {
 
         filtered = (state.appointments || []).filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-            const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
-            const d = (a.paidAt || a.date || '').slice(0, 10);
-            return (isPaid || isLegacyPaid) && d >= pStart && d <= pEnd;
+            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && parseRp(a.fee) > 0;
+            const apptDate = (a.paidAt || a.date || '');
+            const dateStr = apptDate.slice(0, 10);
+            return (isPaid || isLegacyPaid) && dateStr >= pStart && dateStr <= pEnd;
         });
     } else {
-        const from = state.laporanFrom || today();
-        const to = state.laporanTo || today();
+        // DEFAULT MATCH DENGAN UI: Awal bulan ini s/d Hari ini
+        const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const defaultTo = today();
+
+        const from = state.laporanFrom || defaultFrom;
+        const to = state.laporanTo || defaultTo;
+
         title = "JURNAL PENERIMAAN KAS KLINIK";
         periodText = `PERIODE: ${from} s/d ${to}`;
 
         filtered = (state.appointments || []).filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-            const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+            // Legacy check: Jika paymentStatus belum ada, anggap PAID jika FEE > 0
+            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && parseRp(a.fee) > 0;
+
             const apptDate = (a.paidAt || a.date || '');
-            const dateMatch = apptDate && apptDate.slice(0, 10) >= from && apptDate.slice(0, 10) <= to;
+            const dateStr = apptDate.slice(0, 10);
+            const dateMatch = dateStr && dateStr >= from && dateStr <= to;
             return (isPaid || isLegacyPaid) && dateMatch;
         });
     }
