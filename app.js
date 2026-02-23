@@ -57,6 +57,29 @@ function today() {
     return new Date().toISOString().slice(0, 10);
 }
 
+function printHTML(content) {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    iframe.contentWindow.document.write(content);
+    iframe.contentWindow.document.close();
+
+    // Tunggu sebentar agar render selesai
+    setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+        }, 1000);
+    }, 500);
+}
+
 function calculateAge(dob) {
     if (!dob) return '-';
     const ageDifMs = Date.now() - new Date(dob).getTime();
@@ -4085,8 +4108,7 @@ function printJournalReport(mode = 'GENERAL') {
         `;
     }).join('');
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+    const html = `
         <html>
         <head>
             <title>${title} - ${clinic.name}</title>
@@ -4193,17 +4215,10 @@ function printJournalReport(mode = 'GENERAL') {
                     <p style="font-size: 8px; color: #94a3b8; margin-top: 4px;">Ttd & Stempel</p>
                 </div>
             </div>
-
-            <script>
-                window.onload = function() {
-                    window.print();
-                    // window.close();
-                }
-            </script>
         </body>
         </html>
-    `);
-    printWindow.document.close();
+    `;
+    printHTML(html);
 }
 
 function printAppointmentReport() {
@@ -4238,8 +4253,7 @@ function printAppointmentReport() {
         `;
     }).join('');
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+    const html = `
         <html>
         <head>
             <title>Rekapitulasi Kunjungan - ${clinic.name}</title>
@@ -4294,12 +4308,10 @@ function printAppointmentReport() {
                 <div>Dicetak otomatis oleh Sistem ERM FISIOTA pada ${now.toLocaleString('id-ID')}</div>
                 <div>Halaman 1 / 1</div>
             </div>
-
-            <script>window.onload = function() { window.print(); }</script>
         </body>
         </html>
-    `);
-    printWindow.document.close();
+    `;
+    printHTML(html);
 }
 
 
