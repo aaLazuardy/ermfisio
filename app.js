@@ -9,7 +9,7 @@ if (typeof window.IMG_ASSETS === 'undefined') {
 
 // --- 1. STATE & GLOBAL VARIABLES ---
 let state = {
-    _version: '5.4.1',
+    _version: '5.4.2',
     user: null,
     users: [],
     patients: [],
@@ -2906,92 +2906,97 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
 
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
     const now = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
     return `
     <html>
     <head>
         <style>
-            @page { size: 58mm auto; margin: 0; }
-            * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
-            html, body { 
-                width: 58mm; margin: 0; padding: 0;
-                background: #fff; color: #000;
-                font-family: 'Courier New', Courier, monospace;
+            @page { 
+                size: 58mm auto; 
+                margin: 0; 
             }
             body { 
-                padding: 4mm 2mm; font-size: 9pt; line-height: 1.2;
+                width: 58mm; 
+                margin: 0; 
+                padding: 2mm;
+                font-family: 'Courier New', Courier, monospace; 
+                font-size: 9pt; 
+                line-height: 1.2; 
+                color: #000;
+                background: #fff;
             }
             @media print {
-                html, body { width: 58mm; height: auto; }
+                html, body { width: 58mm; margin: 0; padding: 0; }
+                .print-content { width: 54mm; margin: 0 auto; padding: 2mm 0; }
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .bold { font-weight: bold; }
             .uppercase { text-transform: uppercase; }
-            .dashed-line { border-top: 1px dashed #000; margin: 8px 0; }
+            .dashed-line { border-top: 1px dashed #000; margin: 6px 0; }
             .flex { display: flex; justify-content: space-between; align-items: flex-start; }
-            .clinic-name { font-size: 14pt; margin-bottom: 2px; }
-            .clinic-sub { font-size: 8pt; margin-bottom: 5px; }
-            .receipt-type { font-size: 11pt; padding: 5px 0; margin: 10px 0; border: 1px solid #000; background: #eee; -webkit-print-color-adjust: exact; }
-            .qr-container { margin: 15px 0; text-align: center; }
-            .qr-image { width: 50mm; height: 50mm; border: 1px solid #eee; padding: 1mm; background: #fff; }
-            .footer { font-size: 8pt; margin-top: 15px; }
+            .clinic-name { font-size: 12pt; margin-bottom: 2px; }
+            .clinic-sub { font-size: 7pt; margin-bottom: 5px; }
+            .receipt-type { font-size: 10pt; padding: 4px 0; margin: 8px 0; border: 1px solid #000; background: #eee !important; -webkit-print-color-adjust: exact; }
+            .qr-container { margin: 10px 0; text-align: center; }
+            .qr-image { width: 40mm; height: 40mm; border: 1px solid #eee; padding: 1mm; background: #fff; }
+            .footer { font-size: 7pt; margin-top: 10px; }
             .item-row { margin: 2px 0; }
         </style>
     </head>
     <body onload="window.print()">
-        <div class="text-center">
-            <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
-            <div class="clinic-sub uppercase">${state.clinicInfo.subname || ''}</div>
-            <div style="font-size: 7pt; max-width: 90%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
-            <div style="font-size: 8pt;">WA: ${state.clinicInfo.phone || ''}</div>
-            
-            <div class="receipt-type bold uppercase">
-                ${type === 'BILL' ? 'Tagihan Pembayaran' : 'Kuitansi Pembayaran'}
+        <div class="print-content">
+            <div class="text-center">
+                <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
+                <div class="clinic-sub uppercase">${state.clinicInfo.subname || ''}</div>
+                <div style="font-size: 7pt; max-width: 95%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
+                <div style="font-size: 8pt;">WA: ${state.clinicInfo.phone || ''}</div>
+                
+                <div class="receipt-type bold uppercase">
+                    ${type === 'BILL' ? 'Tagihan Pembayaran' : 'Kuitansi Pembayaran'}
+                </div>
             </div>
-        </div>
 
-        <div style="font-size: 9pt;">
-            <div class="flex"><span>Tgl Cetak:</span> <span>${now}</span></div>
-            <div class="flex"><span>Pasien:</span> <span class="bold">${nama}</span></div>
-            <div class="flex"><span>Tgl Kunj:</span> <span>${a.date}</span></div>
-        </div>
-
-        <div class="dashed-line"></div>
-        
-        <div class="bold uppercase" style="font-size: 9pt; margin-bottom: 5px;">Rincian Layanan</div>
-        <div class="item-row flex">
-            <span style="max-width: 60%;">${a.diagnosis || 'Layanan Fisioterapi'}</span>
-            <span>${formatRp(feeBase)}</span>
-        </div>
-        
-        <div class="dashed-line"></div>
-        
-        <div class="flex"><span>Subtotal:</span> <span>${formatRp(feeBase)}</span></div>
-        ${discount > 0 ? `<div class="flex"><span>Diskon:</span> <span>-${formatRp(discount)}</span></div>` : ''}
-        <div class="flex bold" style="font-size: 12pt; margin-top: 8px;">
-            <span>TOTAL:</span>
-            <span>${formatRp(finalAmount)}</span>
-        </div>
-
-        <div class="dashed-line"></div>
-        
-        <div class="flex"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
-        <div class="flex"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
-
-        ${(type === 'BILL' && method === 'QRIS' && qrisImg) ? `
-            <div class="qr-container">
-                <p class="bold" style="font-size: 9pt; margin-bottom: 8px;">SCAN UNTUK BAYAR (QRIS)</p>
-                <img src="${qrisImg}" class="qr-image" />
-                <p style="font-size: 8pt; margin-top: 8px;">Silakan bayar senilai: <br> <span class="bold" style="font-size: 11pt;">${formatRp(finalAmount)}</span></p>
-                <p style="font-size: 7pt; color: #555;">Status akan divalidasi oleh admin</p>
+            <div style="font-size: 8pt;">
+                <div class="flex"><span>Tgl Cetak:</span> <span>${now}</span></div>
+                <div class="flex"><span>Pasien:</span> <span class="bold">${nama}</span></div>
+                <div class="flex"><span>Tgl Kunj:</span> <span>${a.date}</span></div>
             </div>
-        ` : ''}
 
-        <div class="footer text-center">
-            ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 10pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 10pt;">BUKTI TAGIAN</p><p>Tunjukkan saat melakukan pembayaran</p>'}
             <div class="dashed-line"></div>
-            <p style="font-size: 7pt;">E-Receipt by FISIOTA.com</p>
+            
+            <div class="bold uppercase" style="font-size: 8pt; margin-bottom: 4px;">Rincian Layanan</div>
+            <div class="item-row flex" style="font-size: 8pt;">
+                <span style="max-width: 65%;">${a.diagnosis || 'Layanan Fisioterapi'}</span>
+                <span>${formatRp(feeBase)}</span>
+            </div>
+            
+            <div class="dashed-line"></div>
+            
+            <div class="flex"><span>Subtotal:</span> <span>${formatRp(feeBase)}</span></div>
+            ${discount > 0 ? `<div class="flex"><span>Diskon:</span> <span>-${formatRp(discount)}</span></div>` : ''}
+            <div class="flex bold" style="font-size: 11pt; margin-top: 6px;">
+                <span>TOTAL:</span>
+                <span>${formatRp(finalAmount)}</span>
+            </div>
+
+            <div class="dashed-line"></div>
+            
+            <div class="flex" style="font-size: 8pt;"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
+            <div class="flex" style="font-size: 8pt;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
+
+            ${(type === 'BILL' && method === 'QRIS' && qrisImg) ? `
+                <div class="qr-container">
+                    <p class="bold" style="font-size: 8pt; margin-bottom: 6px;">SCAN UNTUK BAYAR (QRIS)</p>
+                    <img src="${qrisImg}" class="qr-image" />
+                    <p style="font-size: 8pt; margin-top: 6px;">Harga: <span class="bold">${formatRp(finalAmount)}</span></p>
+                </div>
+            ` : ''}
+
+            <div class="footer text-center">
+                ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 9pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 9pt;">BUKTI TAGIHAN</p><p>Harap disimpan</p>'}
+                <div class="dashed-line"></div>
+                <p style="font-size: 6pt;">E-Receipt by FISIOTA.com</p>
+            </div>
         </div>
     </body>
     </html>
