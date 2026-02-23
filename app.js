@@ -9,7 +9,7 @@ if (typeof window.IMG_ASSETS === 'undefined') {
 
 // --- 1. STATE & GLOBAL VARIABLES ---
 let state = {
-    _version: '5.4.2',
+    _version: '5.5',
     user: null,
     users: [],
     patients: [],
@@ -833,8 +833,8 @@ function renderDashboard(container) {
                 <h3 class="text-4xl font-bold">${todayAppointments.length}</h3><p class="text-purple-100">Pasien Hari Ini</p>
             </div>
             <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:opacity-90 transition-opacity" onclick="navigate('kasir')">
-                <h3 class="text-3xl font-bold truncate" title="${formatRp(todayIncome)}">${formatRp(todayIncome)}</h3>
-                <p class="text-orange-100">Pemasukan Hari Ini</p>
+                <h3 class="text-2xl md:text-3xl font-bold truncate" title="${formatRp(todayIncome)}">${formatRp(todayIncome)}</h3>
+                <p class="text-orange-100 text-sm md:text-base">Pemasukan Hari Ini</p>
                 ${unpaidToday > 0 ? `<div class="mt-2 bg-white/20 rounded-lg px-2 py-1 text-xs font-bold">${unpaidToday} belum bayar →</div>` : '<div class="mt-2 text-xs text-orange-200">Semua lunas ✓</div>'}
             </div>
         </div>
@@ -1407,15 +1407,22 @@ function renderAssessmentForm(container, useTempData = false) {
             </div>
 
             <div id="step-2" class="${isNewEntry ? 'hidden' : 'flex'} flex-col h-full bg-slate-100 fade-in">
-                <div class="bg-white px-8 py-4 border-b border-slate-200 shadow-sm flex justify-between items-center shrink-0 z-20">
-                    <div class="flex items-center gap-4">
-                        <button onclick="showStep1()" class="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors" title="Kembali ke Template"><i data-lucide="arrow-left" width="24"></i></button>
-                        <div><h2 class="text-xl font-black text-slate-800">Formulir Assessment</h2><div class="flex items-center gap-2 text-sm text-slate-500">Pasien: <span class="font-bold text-blue-600">${state.selectedPatient.name}</span></div></div>
+                <div class="bg-white px-4 md:px-8 py-4 border-b border-slate-200 shadow-sm flex justify-between items-center shrink-0 z-20">
+                    <div class="flex items-center gap-2 md:gap-4">
+                        <button onclick="showStep1()" class="p-1.5 md:p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors" title="Kembali ke Template"><i data-lucide="arrow-left" width="20"></i></button>
+                        <div>
+                            <h2 class="text-lg md:text-xl font-black text-slate-800 leading-tight">Form Assessment</h2>
+                            <div class="flex items-center gap-1 text-[10px] md:text-sm text-slate-500">
+                                Pasien: <span class="font-bold text-blue-600 truncate max-w-[120px] md:max-w-none">${state.selectedPatient.name}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <button type="button" onclick="openOutcomeModal()" class="hidden md:flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold border border-emerald-200 hover:bg-emerald-100 transition-colors"><i data-lucide="calculator" width="16"></i> Kalkulator</button>
-                        <div class="h-8 w-px bg-slate-300 mx-1 hidden md:block"></div>
-                        <p class="text-sm font-bold text-slate-500 mr-2 hidden md:block">${data.date}</p>
+                    <div class="flex items-center gap-2 md:gap-3">
+                        <button type="button" onclick="openOutcomeModal()" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] md:text-sm font-bold border border-emerald-200 hover:bg-emerald-100 transition-colors">
+                            <i data-lucide="calculator" width="14"></i> <span class="hidden md:inline">Kalkulator</span>
+                        </button>
+                        <div class="h-6 md:h-8 w-px bg-slate-300 mx-0.5 md:mx-1"></div>
+                        <p class="text-[10px] md:text-sm font-bold text-slate-500 mr-1 hidden sm:block">${data.date}</p>
                     </div>
                 </div>
 
@@ -4230,7 +4237,7 @@ function openPaymentModal(apptId) {
             <!-- Pilih Metode -->
             <div>
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
-                <div class="grid grid-cols-4 gap-2" id="pm-method-group">
+                <div class="grid grid-cols-2 xs:grid-cols-4 gap-2" id="pm-method-group">
                     ${['Tunai', 'Transfer', 'QRIS', 'BPJS'].map(m => `
                     <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
                         class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
