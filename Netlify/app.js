@@ -3678,7 +3678,12 @@ function renderKasirAntrian(formatRp) {
                             <p class="text-xs text-slate-400">${a.time || '-'} &bull; ${methodIcons[a.paymentMethod] || ''} ${a.paymentMethod || '-'}</p>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="font-bold text-emerald-700">${formatRp(a.finalAmount || a.fee)}</p>
+                            <div class="flex items-center justify-end gap-2 mb-1">
+                                <button onclick="printReceipt('${a.id}', 'RECEIPT')" class="text-slate-300 hover:text-blue-600 transition-colors" title="Cetak Struk">
+                                    <i data-lucide="printer" width="14"></i>
+                                </button>
+                                <p class="font-bold text-emerald-700">${formatRp(a.finalAmount || a.fee)}</p>
+                            </div>
                             <span class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">LUNAS</span>
                         </div>
                     </div>`;
