@@ -9,6 +9,7 @@ if (typeof window.IMG_ASSETS === 'undefined') {
 
 // --- 1. STATE & GLOBAL VARIABLES ---
 let state = {
+    _version: '5.4.1',
     user: null,
     users: [],
     patients: [],
@@ -2891,11 +2892,14 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     const p = (state.patients || []).find(pt => pt.id === a.patientId);
     const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
 
-    // FIX: Always use parseRp for any currency values from state/data
+    // FIX: Selalu bersihkan format Rp agar kalkulasi valid
     const feeBase = parseRp(a.fee) || (p ? parseRp(p.defaultFee) : 0) || 0;
     const discount = parseRp(a.discount) || 0;
-    // Handle both property existence and numeric validity
-    let finalAmount = a.finalAmount !== undefined ? parseRp(a.finalAmount) : (feeBase - discount);
+
+    // Jika finalAmount di data adalah 0 tapi feeBase ada (dan diskon bukan full), 
+    // maka kita hitung ulang (mengatasi data corrupt dari bug sebelumnya)
+    let savedFinal = a.finalAmount !== undefined ? parseRp(a.finalAmount) : null;
+    let finalAmount = (savedFinal !== null && savedFinal > 0) ? savedFinal : (feeBase - discount);
 
     const method = a.paymentMethod || state._selectedPaymentMethod || 'Tunai';
     const qrisImg = state.clinicInfo.qrisImage || '';
@@ -2907,16 +2911,18 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
     <html>
     <head>
         <style>
-            @page { margin: 0; size: 58mm auto; }
-            * { box-sizing: border-box; }
+            @page { size: 58mm auto; margin: 0; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
+            html, body { 
+                width: 58mm; margin: 0; padding: 0;
+                background: #fff; color: #000;
+                font-family: 'Courier New', Courier, monospace;
+            }
             body { 
-                width: 58mm !important; margin: 0; padding: 4mm 2mm;
-                font-family: 'Courier New', Courier, monospace; font-size: 9pt; line-height: 1.2; color: #000;
-                background: #fff;
+                padding: 4mm 2mm; font-size: 9pt; line-height: 1.2;
             }
             @media print {
-                html, body { width: 58mm; }
-                body { margin: 0; padding: 2mm; }
+                html, body { width: 58mm; height: auto; }
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
