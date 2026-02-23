@@ -775,11 +775,10 @@ function renderDashboard(container) {
     const count = state.assessments.length;
     const today = new Date().toISOString().slice(0, 10);
     const todayAppointments = state.appointments.filter(a => a.date === today);
-    // Pemasukan dari pembayaran yang sudah PAID hari ini
-    const todayIncome = state.appointments
-        .filter(a => a.paymentStatus === 'PAID' && a.paidAt && a.paidAt.slice(0, 10) === today)
+    const todayIncome = (state.appointments || [])
+        .filter(a => a.paymentStatus === 'PAID' && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today)
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
-    const unpaidToday = state.appointments.filter(a => a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID').length;
+    const unpaidToday = (state.appointments || []).filter(a => a.date === today && a.status === 'CONFIRMED' && a.paymentStatus !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
 
     container.innerHTML = `
@@ -3473,11 +3472,12 @@ function renderKasirLaporan(formatRp) {
     const savedFrom = state.laporanFrom || defaultFrom;
     const savedTo = state.laporanTo || defaultTo;
 
-    const filtered = state.appointments.filter(a =>
+    const filtered = (state.appointments || []).filter(a =>
         a.paymentStatus === 'PAID' &&
-        a.paidAt && a.paidAt.slice(0, 10) >= savedFrom &&
-        a.paidAt.slice(0, 10) <= savedTo
-    ).sort((a, b) => (b.paidAt || '').localeCompare(a.paidAt || ''));
+        (a.paidAt || a.date) &&
+        (a.paidAt || a.date).slice(0, 10) >= savedFrom &&
+        (a.paidAt || a.date).slice(0, 10) <= savedTo
+    ).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const total = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
     const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
