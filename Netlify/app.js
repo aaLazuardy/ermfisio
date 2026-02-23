@@ -615,10 +615,30 @@ async function pullDataFromSheet() {
             state.patients = data.patients;
             state.assessments = sanitizeAssessments(data.assessments);
             if (data.appointments) state.appointments = data.appointments;
+
+            // Sync Config if available
+            if (data.config && Array.isArray(data.config)) {
+                data.config.forEach(c => {
+                    if (c.key === 'clinic_info' && c.value) {
+                        try { state.clinicInfo = { ...state.clinicInfo, ...JSON.parse(c.value) }; } catch (e) { }
+                    }
+                    if (c.key === 'CLINIC_NAME') state.clinicInfo.name = c.value;
+                    if (c.key === 'CLINIC_SUBNAME') state.clinicInfo.subname = c.value;
+                    if (c.key === 'CLINIC_THERAPIST') state.clinicInfo.therapist = c.value;
+                    if (c.key === 'CLINIC_SIPF') state.clinicInfo.sipf = c.value;
+                    if (c.key === 'CLINIC_ADDRESS') state.clinicInfo.address = c.value;
+                    if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
+                    if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
+                    if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
+                });
+                localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
+            }
+
             saveData();
             alert('✅ Data berhasil ditarik dari Cloud!');
             closeSyncToast();
             renderApp();
+            applyBranding();
         } else {
             alert('⚠️ Sheet Kosong atau Format Salah.\nPastikan Sheet memiliki tab: Patients, Assessments, Appointments.');
         }
@@ -2143,7 +2163,7 @@ function renderConfigView(container) {
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nomor Izin / SIPF</label><input type="text" id="conf-sipf" value="${state.clinicInfo.sipf}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo.address}</textarea></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🗺️ Link Google Maps</label><input type="text" id="conf-maps" value="${state.clinicInfo.mapsUrl || ''}" placeholder="https://maps.google.com/..." class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🏷️ NPWP Klinik / Pribadi</label><input type="text" id="conf-npwp" value="${state.clinicInfo.npwp || ''}" placeholder="00.000.000.0-000.000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div class="col-span-full mt-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-100">
                             <h4 class="font-bold text-purple-800 flex items-center gap-2 mb-3"><i data-lucide="qr-code" width="18"></i> Pengaturan QRIS Statis</h4>
                             <div class="flex flex-col md:flex-row gap-6">
@@ -2169,7 +2189,7 @@ function renderConfigView(container) {
                         </div>
                     </div>
                 </div>
-                <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan Identitas</button></div>
+                <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" id="btn-save-clinic" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan & Sinkron Cloud</button></div>
             </div>
         </div>
 
@@ -2293,7 +2313,7 @@ function renderConfigView(container) {
     lucide.createIcons();
 }
 
-function saveClinicConfig() {
+async function saveClinicConfig() {
     state.clinicInfo = {
         name: document.getElementById('conf-name').value,
         subname: document.getElementById('conf-sub').value,
@@ -2301,12 +2321,55 @@ function saveClinicConfig() {
         sipf: document.getElementById('conf-sipf').value,
         address: document.getElementById('conf-address').value,
         phone: document.getElementById('conf-phone').value,
-        mapsUrl: document.getElementById('conf-maps').value,
+        mapsUrl: document.getElementById('conf-maps')?.value || '',
+        npwp: document.getElementById('conf-npwp')?.value || '',
         qrisImage: document.getElementById('conf-qris-base64')?.value || ''
     };
+
     localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
     applyBranding();
-    alert('Identitas Klinik Berhasil Disimpan!');
+
+    const btn = document.getElementById('btn-save-clinic');
+    const originalText = btn.innerHTML;
+
+    // Sync to GAS
+    if (state.scriptUrl) {
+        try {
+            btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" width="16"></i> Menyinkronkan...`;
+            lucide.createIcons();
+
+            const sheetId = getSheetIdFromUrl(state.scriptUrl);
+            const configItems = [
+                { key: 'CLINIC_NAME', value: state.clinicInfo.name },
+                { key: 'CLINIC_SUBNAME', value: state.clinicInfo.subname },
+                { key: 'CLINIC_THERAPIST', value: state.clinicInfo.therapist },
+                { key: 'CLINIC_SIPF', value: state.clinicInfo.sipf },
+                { key: 'CLINIC_ADDRESS', value: state.clinicInfo.address },
+                { key: 'CLINIC_NPWP', value: state.clinicInfo.npwp },
+                { key: 'CLINIC_PHONE', value: state.clinicInfo.phone },
+                { key: 'CLINIC_QRIS', value: state.clinicInfo.qrisImage }
+            ];
+
+            await fetch(LICENSE_API_URL, {
+                method: 'POST', mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync_incremental',
+                    sheet_id: sheetId,
+                    config: configItems
+                })
+            });
+            alert('Identitas Klinik Berhasil Disimpan & Disinkronkan ke Cloud!');
+        } catch (e) {
+            console.warn("Sync failed, saved locally:", e);
+            alert('Tersimpan secara lokal (Sinkronisasi Gagal).');
+        } finally {
+            btn.innerHTML = originalText;
+            lucide.createIcons();
+        }
+    } else {
+        alert('Identitas Klinik Berhasil Disimpan (Lokal)!');
+    }
 }
 
 function handleQrisUpload(input) {
@@ -3373,21 +3436,29 @@ function switchKasirTab(tab) {
     renderKasirView(document.getElementById('main-content'));
 }
 
+// --- UTILS KASIR ---
+function parseRp(val) {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const clean = val.toString().replace(/Rp/g, '').replace(/\./g, '').replace(/,/g, '').replace(/\s/g, '');
+    return Number(clean) || 0;
+}
+
 function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
     const antrian = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
         return a.date === today && (a.status === 'CONFIRMED' || !a.status) && !isPaid && !isLegacyPaid;
     }).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
     const lunas = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
         return a.date === today && (isPaid || isLegacyPaid);
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
-    const totalLunasHariIni = lunas.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const totalLunasHariIni = lunas.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
 
     return `
         <!-- Summary strip -->
@@ -3486,16 +3557,17 @@ function renderKasirLaporan(formatRp) {
 
     const filtered = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
-        const dateMatch = (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) >= savedFrom && (a.paidAt || a.date).slice(0, 10) <= savedTo;
+        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+        const apptDate = (a.paidAt || a.date || '');
+        const dateMatch = apptDate && apptDate.slice(0, 10) >= savedFrom && apptDate.slice(0, 10) <= savedTo;
         return (isPaid || isLegacyPaid) && dateMatch;
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
-    const total = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const total = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
     const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
     filtered.forEach(a => {
         const m = a.paymentMethod || 'Tunai';
-        byMethod[m] = (byMethod[m] || 0) + (Number(a.finalAmount) || Number(a.fee) || 0);
+        byMethod[m] = (byMethod[m] || 0) + (parseRp(a.finalAmount) || parseRp(a.fee) || 0);
     });
 
     // Group by date for per-hari view
@@ -3504,7 +3576,7 @@ function renderKasirLaporan(formatRp) {
         const d = a.paidAt ? a.paidAt.slice(0, 10) : a.date;
         if (!byDate[d]) byDate[d] = { count: 0, total: 0 };
         byDate[d].count++;
-        byDate[d].total += Number(a.finalAmount) || Number(a.fee) || 0;
+        byDate[d].total += parseRp(a.finalAmount) || parseRp(a.fee) || 0;
     });
 
     return `
@@ -3524,6 +3596,14 @@ function renderKasirLaporan(formatRp) {
                 <button onclick="applyLaporanFilter()"
                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md">
                     Tampilkan
+                </button>
+                <button onclick="printJournalReport()"
+                    class="bg-slate-800 hover:bg-black text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md flex items-center gap-2">
+                    <i data-lucide="printer" width="16"></i> Cetak Jurnal
+                </button>
+                <button onclick="printAppointmentReport()"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md flex items-center gap-2">
+                    <i data-lucide="list" width="16"></i> Rekap Kunjungan (Excel-Style)
                 </button>
             </div>
         </div>
@@ -3743,6 +3823,33 @@ function updatePaymentTotal(feeBase) {
     if (qrisNominal) qrisNominal.textContent = formatRp(total);
 }
 
+async function confirmPayment(apptId) {
+    const a = (state.appointments || []).find(x => x.id === apptId);
+    if (!a) return;
+
+    const discount = Number(document.getElementById('pm-discount')?.value) || 0;
+    const feeBase = parseRp(a.fee);
+    const finalAmount = Math.max(0, feeBase - discount);
+    const method = state._selectedPaymentMethod;
+
+    if (!method) { alert('Pilih metode pembayaran!'); return; }
+
+    // Update state
+    a.paymentStatus = 'PAID';
+    a.paymentMethod = method;
+    a.discount = discount;
+    a.finalAmount = finalAmount;
+    a.paidAt = new Date().toISOString();
+    a.updatedAt = new Date().toISOString();
+
+    saveData();
+    closeModal();
+    renderKasirView(document.getElementById('main-content'));
+
+    // Try to sync instantly
+    autoSyncPayment(a);
+}
+
 function renderKasirPajak(formatRp) {
     const now = new Date();
     const currentMonth = state.taxMonth || (now.getMonth() + 1);
@@ -3755,13 +3862,13 @@ function renderKasirPajak(formatRp) {
 
     const filtered = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
         const d = (a.paidAt || a.date || '').slice(0, 10);
         return (isPaid || isLegacyPaid) && d >= periodStart && d <= periodEnd;
     });
 
     // Hitung Auto
-    const autoBruto = filtered.reduce((s, a) => s + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
+    const autoBruto = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
     const autoPajak = autoBruto * 0.005; // PPh Final 0.5% UMKM
 
     // State Override (Jika user pernah edit)
@@ -3882,106 +3989,306 @@ function updateTaxOverride(key, val) {
     // but here we just keep it in state while session is active.
 }
 
-function printTaxReport() {
-    const now = new Date();
-    const currentMonth = state.taxMonth || (now.getMonth() + 1);
-    const currentYear = state.taxYear || now.getFullYear();
-    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-    const monthName = months[currentMonth - 1];
+// --- FUNGSI CETAK JURNAL & PAJAK ESTETIK ---
 
-    const bruto = state.taxOverride?.bruto !== undefined ? state.taxOverride.bruto : 0; // Sebaiknya ambil dari kalkulasi jika override kosong
-    const notes = state.taxOverride?.notes || '-';
-    const tax = bruto * 0.005;
+function printTaxReport() {
+    printJournalReport('TAX');
+}
+
+function printJournalReport(mode = 'GENERAL') {
+    const now = new Date();
     const clinic = state.clinicInfo || { name: 'FISIOTA' };
+    let filtered = [];
+    let title = "";
+    let periodText = "";
+
+    if (mode === 'TAX') {
+        const currentMonth = state.taxMonth || (now.getMonth() + 1);
+        const currentYear = state.taxYear || now.getFullYear();
+        const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const monthName = months[currentMonth - 1];
+
+        title = "REKAPITULASI PAJAK FINAL (UMKM PP-23)";
+        periodText = `PERIODE BULAN ${monthName.toUpperCase()} ${currentYear}`;
+
+        const monthStr = String(currentMonth).padStart(2, '0');
+        const pStart = `${currentYear}-${monthStr}-01`;
+        const pEnd = `${currentYear}-${monthStr}-31`;
+
+        filtered = (state.appointments || []).filter(a => {
+            const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+            const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+            const d = (a.paidAt || a.date || '').slice(0, 10);
+            return (isPaid || isLegacyPaid) && d >= pStart && d <= pEnd;
+        });
+    } else {
+        const from = state.laporanFrom || today();
+        const to = state.laporanTo || today();
+        title = "JURNAL PENERIMAAN KAS KLINIK";
+        periodText = `PERIODE: ${from} s/d ${to}`;
+
+        filtered = (state.appointments || []).filter(a => {
+            const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+            const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+            const apptDate = (a.paidAt || a.date || '');
+            const dateMatch = apptDate && apptDate.slice(0, 10) >= from && apptDate.slice(0, 10) <= to;
+            return (isPaid || isLegacyPaid) && dateMatch;
+        });
+    }
+
+    // Sort by Date
+    filtered.sort((a, b) => (a.paidAt || a.date || "").localeCompare(b.paidAt || b.date || ""));
+
+    // Calculation
+    let totalDpp = 0;
+    let totalTax = 0;
+    let totalGrand = 0;
+
+    const rowsHtml = filtered.map((a, idx) => {
+        const patient = state.patients.find(p => p.id === a.patientId) || { name: a.visitor_name || a.name || 'Pasien' };
+        const grandTotal = parseRp(a.finalAmount) || parseRp(a.fee) || 0;
+        const dpp = grandTotal;
+        const tax = grandTotal * 0.005;
+
+        totalDpp += dpp;
+        totalTax += tax;
+        totalGrand += grandTotal;
+
+        const dateDisplay = a.paidAt
+            ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(a.paidAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+            : formatDateForDisplay(a.date);
+
+        return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${dateDisplay}</td>
+                <td style="font-family: monospace; font-size: 10px;">${a.id}</td>
+                <td>${patient.name}</td>
+                <td style="text-align: right;">${grandTotal.toLocaleString('id-ID')}</td>
+                <td style="text-align: right;">${dpp.toLocaleString('id-ID')}</td>
+                <td style="text-align: right;">${tax.toLocaleString('id-ID')}</td>
+                <td style="font-size: 10px;">${a.paymentMethod || '-'}</td>
+            </tr>
+        `;
+    }).join('');
 
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
         <html>
         <head>
-            <title>Laporan Pajak - ${clinic.name}</title>
+            <title>${title} - ${clinic.name}</title>
             <style>
-                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
-                .header { text-align: center; border-bottom: 3px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-                .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
-                .info-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-                .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-                th { background: #f9f9f9; font-weight: bold; }
-                .total-row { font-size: 18px; font-weight: bold; background: #f0f0f0; }
-                .footer { margin-top: 50px; display: flex; justify-content: space-between; }
-                .signature { text-align: center; width: 250px; }
-                .sig-box { height: 100px; }
+                @page { size: A4 portrait; margin: 15mm; }
+                body { font-family: 'Inter', -apple-system, system-ui, sans-serif; padding: 0; color: #1e293b; line-height: 1.4; font-size: 10px; }
+                
+                .header-wrapper { display: flex; align-items: flex-start; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 20px; }
+                .logo-box { width: 60px; height: 60px; background: #f1f5f9; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 15px; border: 1px solid #cbd5e1; }
+                .clinic-info { flex: 1; }
+                .clinic-info h1 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.5px; }
+                .clinic-info p { margin: 1px 0; color: #64748b; font-size: 9px; }
+                .clinic-info .bold { color: #0f172a; font-weight: 700; }
+
+                .report-header { text-align: center; margin-bottom: 20px; }
+                .report-header h2 { margin: 0; font-size: 14px; font-weight: 800; border-bottom: 1px solid #1e293b; display: inline-block; padding-bottom: 2px; }
+                .report-header p { margin: 4px 0 0; font-size: 11px; font-weight: 700; color: #334155; }
+
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th { background: #f8fafc; color: #1e293b; font-weight: 800; text-transform: uppercase; font-size: 9px; border-top: 1px solid #1e293b; border-bottom: 1px solid #1e293b; padding: 8px 4px; }
+                td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+                .text-right { text-align: right; }
+                
+                .summary-table { margin-left: auto; width: 280px; margin-top: 10px; }
+                .summary-table td { border: none; padding: 2px 4px; font-size: 11px; }
+                .summary-table .label { text-align: right; color: #64748b; font-weight: 600; padding-right: 15px; }
+                .summary-table .value { text-align: right; font-weight: 900; border-bottom: 1px double #1e293b; color: #0f172a; }
+                .summary-table .highlight { color: #dc2626; }
+
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
+                .print-meta { font-size: 8px; color: #94a3b8; font-style: italic; }
+                .signature-box { text-align: center; width: 200px; }
+                .signature-box p { margin: 2px 0; }
+                .signature-space { height: 60px; }
+
                 @media print { .no-print { display: none; } }
             </style>
         </head>
         <body>
-            <div class="header">
-                <h1>REKAPITULASI PENGHASILAN BRUTO (UMKM)</h1>
-                <p>${clinic.name} &bull; ${clinic.address || ''}</p>
+            <div class="header-wrapper">
+                <div class="logo-box">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                </div>
+                <div class="clinic-info">
+                    <h1>${clinic.name}</h1>
+                    <p class="bold">Izin Operasional: ${clinic.sipf || '-'}</p>
+                    <p>${clinic.address || '-'}</p>
+                    <p>Telp: ${clinic.phone || '-'} &bull; NPWP: ${clinic.npwp || '-'}</p>
+                </div>
             </div>
 
-            <div class="info-grid">
-                <div>
-                    <p><strong>Masa Pajak:</strong> ${monthName} ${currentYear}</p>
-                    <p><strong>Dibuat Pada:</strong> ${now.toLocaleDateString('id-ID')} ${now.toLocaleTimeString('id-ID')}</p>
+            <div class="report-header">
+                <h2>${title}</h2>
+                <p>${periodText}</p>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25px;">No</th>
+                        <th style="width: 100px;">Tanggal & Jam</th>
+                        <th style="width: 70px;">ID Faktur</th>
+                        <th>Nama Pasien</th>
+                        <th style="width: 80px;" class="text-right">Grand Total</th>
+                        <th style="width: 80px;" class="text-right">DPP</th>
+                        <th style="width: 80px;" class="text-right">Pajak (0.5%)</th>
+                        <th style="width: 80px;">Metode</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <table class="summary-table">
+                <tr>
+                    <td class="label">Total DPP :</td>
+                    <td class="value">Rp ${totalDpp.toLocaleString('id-ID')}</td>
+                </tr>
+                <tr>
+                    <td class="label">Total Pajak :</td>
+                    <td class="value highlight">Rp ${totalTax.toLocaleString('id-ID')}</td>
+                </tr>
+                <tr>
+                    <td class="label">Total Penerimaan :</td>
+                    <td class="value">Rp ${totalGrand.toLocaleString('id-ID')}</td>
+                </tr>
+            </table>
+
+            <div style="margin-top: 20px; font-size: 9px; color: #475569; border: 1px dashed #cbd5e1; padding: 8px; border-radius: 6px;">
+                <strong>Keterangan:</strong> ${state.taxOverride?.notes || '-'}
+            </div>
+
+            <div class="footer">
+                <div class="print-meta">
+                    Sistem Digital ERM FISIOTA<br>
+                    Dicetak: ${now.toLocaleString('id-ID')}
                 </div>
-                <div style="text-align: right;">
-                    <p><strong>NPWP:</strong> ${clinic.npwp || '-'}</p>
-                    <p><strong>Kategori:</strong> PP-23 (Pajak Final 0.5%)</p>
+                <div class="signature-box">
+                    <p>${clinic.location || 'Kota'}, ${now.toLocaleDateString('id-ID')}</p>
+                    <p>Pimpinan Klinik,</p>
+                    <div class="signature-space"></div>
+                    <p><strong>( ______________________ )</strong></p>
+                    <p style="font-size: 8px; color: #94a3b8; margin-top: 4px;">Ttd & Stempel</p>
+                </div>
+            </div>
+
+            <script>
+                window.onload = function() {
+                    window.print();
+                    // window.close();
+                }
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+function printAppointmentReport() {
+    const now = new Date();
+    const clinic = state.clinicInfo || { name: 'FISIOTA' };
+    const from = state.laporanFrom || today();
+    const to = state.laporanTo || today();
+
+    // FILTER SEMUA (Tanpa filter PAID) sesuai tab Appointments
+    const filtered = (state.appointments || []).filter(a => {
+        const apptDate = (a.date || '').slice(0, 10);
+        return apptDate >= from && apptDate <= to;
+    }).sort((a, b) => (a.date + ' ' + a.time).localeCompare(b.date + ' ' + b.time));
+
+    const rowsHtml = filtered.map((a, idx) => {
+        const p = (state.patients || []).find(pt => pt.id === a.patientId);
+        const name = p ? p.name : (a.visitor_name || a.name || '-');
+        const therapist = (state.users || []).find(u => u.id === a.therapistId);
+        const fee = parseRp(a.fee);
+
+        return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${a.date}</td>
+                <td style="text-align: center;">${a.time || '-'}</td>
+                <td><strong>${name}</strong></td>
+                <td>${therapist ? therapist.name : (a.therapistId || '-')}</td>
+                <td style="text-align: center;"><span style="font-size: 8px; padding: 2px 5px; border-radius: 4px; background: ${a.paymentStatus === 'PAID' ? '#dcfce7' : '#f1f5f9'}; color: ${a.paymentStatus === 'PAID' ? '#166534' : '#475569'}; font-weight: bold;">${a.paymentStatus || (a.status || 'SCHEDULED')}</span></td>
+                <td style="text-align: right;">${fee.toLocaleString('id-ID')}</td>
+                <td style="font-size: 9px; color: #64748b;">${a.notes || '-'}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Rekapitulasi Kunjungan - ${clinic.name}</title>
+            <style>
+                @page { size: A4 landscape; margin: 10mm; }
+                body { font-family: 'Inter', system-ui, sans-serif; padding: 0; color: #1e293b; font-size: 9px; line-height: 1.3; }
+                
+                .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px; }
+                .header-left h1 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; }
+                .header-left p { margin: 2px 0; color: #64748b; font-size: 9px; }
+                .header-right { text-align: right; }
+                .header-right h2 { margin: 0; font-size: 14px; font-weight: 800; color: #2563eb; }
+
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th { background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px 4px; font-weight: 800; text-transform: uppercase; font-size: 8px; text-align: left; }
+                td { border: 1px solid #e2e8f0; padding: 5px 4px; vertical-align: middle; }
+                
+                .footer { margin-top: 20px; display: flex; justify-content: space-between; font-size: 8px; color: #94a3b8; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="header-left">
+                    <h1>${clinic.name}</h1>
+                    <p>${clinic.address || '-'}</p>
+                </div>
+                <div class="header-right">
+                    <h2>REKAPITULASI KUNJUNGAN PASIEN</h2>
+                    <p>Periode: <strong>${from} s/d ${to}</strong></p>
                 </div>
             </div>
 
             <table>
                 <thead>
                     <tr>
-                        <th>Keterangan</th>
-                        <th style="text-align: right;">Jumlah (IDR)</th>
+                        <th style="width: 25px; text-align: center;">No</th>
+                        <th style="width: 70px;">Tanggal</th>
+                        <th style="width: 45px; text-align: center;">Jam</th>
+                        <th style="width: 180px;">Nama Pasien</th>
+                        <th style="width: 100px;">Terapis</th>
+                        <th style="width: 70px; text-align: center;">Status</th>
+                        <th style="width: 80px; text-align: right;">Biaya (Fee)</th>
+                        <th>Catatan/Notes</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Total Penghasilan Bruto (Omzet)</td>
-                        <td style="text-align: right;">Rp ${bruto.toLocaleString('id-ID')}</td>
-                    </tr>
-                    <tr>
-                        <td>Potongan / Penyesuaian</td>
-                        <td style="text-align: right;">Rp 0</td>
-                    </tr>
-                    <tr class="total-row">
-                        <td>Dasar Pengenaan Pajak (DPP)</td>
-                        <td style="text-align: right;">Rp ${bruto.toLocaleString('id-ID')}</td>
-                    </tr>
-                    <tr class="total-row" style="color: #c00;">
-                        <td>Estimasi Pajak Terutang (0.5%)</td>
-                        <td style="text-align: right;">Rp ${tax.toLocaleString('id-ID')}</td>
-                    </tr>
+                    ${rowsHtml}
                 </tbody>
             </table>
 
-            <div class="card" style="margin-top: 20px;">
-                <strong>Catatan/Keterangan:</strong><br>
-                ${notes.replace(/\n/g, '<br>')}
-            </div>
-
             <div class="footer">
-                <div>
-                    <p>Dicetak secara otomatis oleh sistem ERM FISIOTA.</p>
-                </div>
-                <div class="signature">
-                    <p>${clinic.location || 'Semarang'}, ${now.toLocaleDateString('id-ID')}</p>
-                    <p>Pimpinan Klinik,</p>
-                    <div class="sig-box"></div>
-                    <p><strong>( ______________________ )</strong></p>
-                </div>
+                <div>Dicetak otomatis oleh Sistem ERM FISIOTA pada ${now.toLocaleString('id-ID')}</div>
+                <div>Halaman 1 / 1</div>
             </div>
 
-            <script>window.print();</script>
+            <script>window.onload = function() { window.print(); }</script>
         </body>
         </html>
     `);
     printWindow.document.close();
 }
+
 
 async function autoSyncPayment(appt) {
     const sheetId = getSheetIdFromUrl(state.scriptUrl);
