@@ -1583,6 +1583,10 @@ function renderAssessmentForm(container, useTempData = false) {
     if (!state.selectedPatient) { navigate('patients'); return; }
     const isNewEntry = !state.currentAssessment && !data.diagnosis;
 
+    // PRESERVE SCROLL
+    const scrollEl = document.getElementById('main-form-scroll');
+    const oldScroll = scrollEl ? scrollEl.scrollTop : 0;
+
     container.innerHTML = `
         <div class="h-full overflow-y-auto bg-slate-50 relative flex flex-col">
             <div id="step-1" class="${isNewEntry ? 'block' : 'hidden'} h-full overflow-y-auto p-8 fade-in">
@@ -1626,22 +1630,8 @@ function renderAssessmentForm(container, useTempData = false) {
                                 </div>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
-                            ${Object.keys(ICF_TEMPLATES).filter(t => {
-        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
-        const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
-        return matchesCat && matchesSearch;
-    }).map(t => `
-                                <button onclick="selectTemplateAndGo('${t}')" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-blue-400 hover:-translate-y-1 transition-all text-left group h-full relative overflow-hidden">
-                                    <div class="flex items-start justify-between relative z-10"><span class="font-bold text-slate-700 group-hover:text-blue-600 transition-colors line-clamp-2 text-sm">${t}</span><i data-lucide="arrow-right" class="text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all shrink-0" width="16"></i></div>
-                                    <div class="mt-3 flex flex-wrap gap-1 relative z-10"><span class="text-[9px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ICD: ${ICF_TEMPLATES[t].icd || '-'}</span>${ICF_TEMPLATES[t].category ? `<span class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold uppercase">${ICF_TEMPLATES[t].category}</span>` : ''}</div>
-                                </button>
-                            `).join('')}
-                            ${Object.keys(ICF_TEMPLATES).filter(t => {
-        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
-        const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
-        return matchesCat && matchesSearch;
-    }).length === 0 ? `<div class="col-span-full text-center py-10 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center gap-2"><i data-lucide="search-x" width="40" class="opacity-20"></i><span>Tidak menemukan template yang cocok dengan pencarian <strong>"${templateSearchQuery}"</strong> di kategori <strong>${currentTemplateCategory}</strong></span></div>` : ''}
+                        <div id="icf-template-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
+                            ${renderTemplateGrid()}
                         </div>
                     </div>
                 </div>
@@ -1790,6 +1780,40 @@ function renderAssessmentForm(container, useTempData = false) {
         </div>
     `;
     lucide.createIcons();
+
+    // RESTORE SCROLL
+    if (scrollEl) {
+        const newScrollEl = document.getElementById('main-form-scroll');
+        if (newScrollEl) newScrollEl.scrollTop = oldScroll;
+    }
+}
+
+function renderTemplateGrid() {
+    const templates = Object.keys(ICF_TEMPLATES).filter(t => {
+        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
+        const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
+        return matchesCat && matchesSearch;
+    });
+
+    if (templates.length === 0) {
+        return `<div class="col-span-full text-center py-10 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center gap-2">
+            <i data-lucide="search-x" width="40" class="opacity-20"></i>
+            <span>Tidak menemukan template yang cocok dengan pencarian <strong>"${templateSearchQuery}"</strong> di kategori <strong>${currentTemplateCategory}</strong></span>
+        </div>`;
+    }
+
+    return templates.map(t => `
+        <button onclick="selectTemplateAndGo('${t}')" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-blue-400 hover:-translate-y-1 transition-all text-left group h-full relative overflow-hidden">
+            <div class="flex items-start justify-between relative z-10">
+                <span class="font-bold text-slate-700 group-hover:text-blue-600 transition-colors line-clamp-2 text-sm">${t}</span>
+                <i data-lucide="arrow-right" class="text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all shrink-0" width="16"></i>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-1 relative z-10">
+                <span class="text-[9px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ICD: ${ICF_TEMPLATES[t].icd || '-'}</span>
+                ${ICF_TEMPLATES[t].category ? `<span class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold uppercase">${ICF_TEMPLATES[t].category}</span>` : ''}
+            </div>
+        </button>
+    `).join('');
 }
 
 function renderSectionBox(title, icon, content, key, hideCustomInput = false) {
@@ -1825,6 +1849,9 @@ function toggleFormItem(category, item) {
     const index = list.indexOf(item);
     if (index > -1) list.splice(index, 1);
     else list.push(item);
+
+    // Update UI immediately (especially for eval list) with scroll preservation
+    renderAssessmentForm(document.getElementById('main-content'), true);
 }
 
 function addCustomItem(category) {
@@ -1914,18 +1941,23 @@ function showStep1() { document.getElementById('step-1').classList.remove('hidde
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
 function setTemplateCategory(cat) {
     currentTemplateCategory = cat;
-    renderAssessmentForm(document.getElementById('main-content'), true);
+    const grid = document.getElementById('icf-template-grid');
+    if (grid) {
+        grid.innerHTML = renderTemplateGrid();
+        renderIcons();
+    } else {
+        renderAssessmentForm(document.getElementById('main-content'), true);
+    }
     showStep1();
 }
 function handleTemplateSearch(query) {
     templateSearchQuery = query;
-    renderAssessmentForm(document.getElementById('main-content'), true);
-    // Restore focus to search input
-    const input = document.getElementById('icf-search');
-    if (input) {
-        input.focus();
-        const len = input.value.length;
-        input.setSelectionRange(len, len);
+    const grid = document.getElementById('icf-template-grid');
+    if (grid) {
+        grid.innerHTML = renderTemplateGrid();
+        renderIcons();
+    } else {
+        renderAssessmentForm(document.getElementById('main-content'), true);
     }
 }
 
