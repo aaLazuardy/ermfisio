@@ -3,7 +3,7 @@
  * Handles storage for patients, assessments, appointments, expenses, and users.
  */
 const DB_NAME = 'FisiotaERM';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = ['patients', 'assessments', 'appointments', 'expenses', 'users', 'config', 'packages'];
 
 const db = {
