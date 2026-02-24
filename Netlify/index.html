@@ -11,7 +11,18 @@
    <script src="https://unpkg.com/lucide@latest"></script>
 
    <link rel="stylesheet" href="style.css">
+   <link rel="manifest" href="manifest.json">
+
    <script>
+      // Service Worker Registration
+      if ('serviceWorker' in navigator) {
+         window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js')
+               .then(reg => console.log('Service Worker registered', reg))
+               .catch(err => console.log('Service Worker registration failed', err));
+         });
+      }
+
       window.onerror = function (msg, url, line, col, error) {
          // IGNORE GENERIC SCRIPT ERRORS (CORS/Ext)
          if (msg && typeof msg === 'string' && msg.toLowerCase().indexOf('script error') > -1 && (!line || line === 0)) {
