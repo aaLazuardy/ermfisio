@@ -2503,6 +2503,7 @@ function renderConfigView(container) {
                     </div>
                 </div>
             </div>
+        </div>
         <div id="tab-content-packages" class="config-tab-content hidden">
             <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
@@ -2525,21 +2526,21 @@ function renderConfigView(container) {
             <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-4">
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Klinik (Judul)</label><input type="text" id="conf-name" value="${state.clinicInfo.name}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Sub-Judul / Tagline</label><input type="text" id="conf-sub" value="${state.clinicInfo.subname}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Fisioterapis (Ttd)</label><input type="text" id="conf-therapist" value="${state.clinicInfo.therapist}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Klinik (Judul)</label><input type="text" id="conf-name" value="${state.clinicInfo?.name || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Sub-Judul / Tagline</label><input type="text" id="conf-sub" value="${state.clinicInfo?.subname || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Fisioterapis (Ttd)</label><input type="text" id="conf-therapist" value="${state.clinicInfo?.therapist || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                     </div>
                     <div class="space-y-4">
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nomor Izin / SIPF</label><input type="text" id="conf-sipf" value="${state.clinicInfo.sipf}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo.address}</textarea></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🏷️ NPWP Klinik / Pribadi</label><input type="text" id="conf-npwp" value="${state.clinicInfo.npwp || ''}" placeholder="00.000.000.0-000.000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nomor Izin / SIPF</label><input type="text" id="conf-sipf" value="${state.clinicInfo?.sipf || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo?.address || ''}</textarea></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo?.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🏷️ NPWP Klinik / Pribadi</label><input type="text" id="conf-npwp" value="${state.clinicInfo?.npwp || ''}" placeholder="00.000.000.0-000.000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div class="col-span-full mt-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-100">
                             <h4 class="font-bold text-purple-800 flex items-center gap-2 mb-3"><i data-lucide="qr-code" width="18"></i> Pengaturan QRIS Statis</h4>
                             <div class="flex flex-col md:flex-row gap-6">
                                 <div class="shrink-0">
                                     <div id="qris-preview-container" class="w-40 h-40 bg-white rounded-xl border-2 border-dashed border-purple-200 flex items-center justify-center overflow-hidden">
-                                        ${state.clinicInfo.qrisImage
+                                        ${state.clinicInfo?.qrisImage
             ? `<img src="${state.clinicInfo.qrisImage}" class="w-full h-full object-contain">`
             : `<div class="text-center text-slate-300"><i data-lucide="image" width="32" class="mx-auto mb-1"></i><p class="text-[10px]">Belum ada QR</p></div>`}
                                     </div>
@@ -2551,9 +2552,9 @@ function renderConfigView(container) {
                                         <button onclick="document.getElementById('conf-qris-file').click()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-sm">
                                             <i data-lucide="upload" width="16"></i> Pilih Gambar
                                         </button>
-                                        ${state.clinicInfo.qrisImage ? `<button onclick="removeQrisImage()" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors">Hapus</button>` : ''}
+                                        ${state.clinicInfo?.qrisImage ? `<button onclick="removeQrisImage()" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors">Hapus</button>` : ''}
                                     </div>
-                                    <input type="hidden" id="conf-qris-base64" value="${state.clinicInfo.qrisImage || ''}">
+                                    <input type="hidden" id="conf-qris-base64" value="${state.clinicInfo?.qrisImage || ''}">
                                 </div>
                             </div>
                         </div>
@@ -2578,7 +2579,7 @@ function renderConfigView(container) {
                             `).join('')}
                         </div>
                         <div class="flex items-center gap-2">
-                            <input type="color" value="${conf.accentColor.startsWith('#') ? conf.accentColor : '#2563eb'}" onchange="updatePdfConfig('accentColor', this.value)" class="w-8 h-8 p-0 border-0 rounded cursor-pointer">
+                            <input type="color" value="${conf.accentColor && conf.accentColor.startsWith('#') ? conf.accentColor : '#2563eb'}" onchange="updatePdfConfig('accentColor', this.value)" class="w-8 h-8 p-0 border-0 rounded cursor-pointer">
                             <span class="text-xs text-slate-500 font-bold">Custom Color</span>
                         </div>
                     </div>
@@ -2621,8 +2622,8 @@ function renderConfigView(container) {
                                 <p class="text-[11px] text-slate-600">2. Masukkan Chat ID (User ID / Group ID):</p>
                             </div>
                             <div class="space-y-3">
-                                <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Chat ID (Wajib)</label><input type="text" id="notif-tg-chatid" value="${state.notificationConfig.telegramChatId || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm font-mono" placeholder="-100xxxxxxx"></div>
-                                <div><label class="text-xs font-bold text-slate-400 uppercase block mb-1">Bot Token (Opsional)</label><input type="text" id="notif-tg-token" value="${state.notificationConfig.telegramToken || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs font-mono text-slate-400" placeholder="Kosongkan jika pakai Bot Pusat"></div>
+                                <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Chat ID (Wajib)</label><input type="text" id="notif-tg-chatid" value="${state.notificationConfig?.telegramChatId || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm font-mono" placeholder="-100xxxxxxx"></div>
+                                <div><label class="text-xs font-bold text-slate-400 uppercase block mb-1">Bot Token (Opsional)</label><input type="text" id="notif-tg-token" value="${state.notificationConfig?.telegramToken || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs font-mono text-slate-400" placeholder="Kosongkan jika pakai Bot Pusat"></div>
                             </div>
                         </div>
                     </div>
@@ -2631,13 +2632,16 @@ function renderConfigView(container) {
                         <div class="bg-amber-50 p-4 rounded-xl border border-amber-100">
                             <h4 class="font-bold text-amber-800 flex items-center gap-2 mb-3"><i data-lucide="mail" width="16"></i> Setup Email</h4>
                             <div class="space-y-3">
-                                <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Email Tujuan (Penerima)</label><input type="email" id="notif-email-target" value="${state.notificationConfig.targetEmail || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm" placeholder="anda@gmail.com"></div>
+                                <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Email Tujuan (Penerima)</label><input type="email" id="notif-email-target" value="${state.notificationConfig?.targetEmail || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm" placeholder="anda@gmail.com"></div>
                                 <div>
                                     <label class="text-xs font-bold text-slate-500 uppercase block mb-1 flex justify-between"><span>Email Pengirim (Opsional)</span><span class="text-[10px] text-amber-600">*Harus Alias Terverifikasi</span></label>
-                                    <input type="email" id="notif-email-sender" value="${state.notificationConfig.senderEmail || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm" placeholder="admin@klinik.com">
+                                    <input type="email" id="notif-email-sender" value="${state.notificationConfig?.senderEmail || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm" placeholder="admin@klinik.com">
                                     <p class="text-[10px] text-slate-400 mt-1 italic">Kosongkan jika ingin menggunakan email akun utama Google.</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Custom WhatsApp Message Templates -->
                 <div class="mt-8 border-t border-slate-100 pt-6">
@@ -2653,14 +2657,14 @@ function renderConfigView(container) {
                                     <span>Template Konfirmasi Booking</span>
                                     <button onclick="resetNotifTemplate('confirm')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
                                 </label>
-                                <textarea id="notif-msg-confirm" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan konfirmasi...">${state.notificationConfig.msgConfirm || ''}</textarea>
+                                <textarea id="notif-msg-confirm" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan konfirmasi...">${state.notificationConfig?.msgConfirm || ''}</textarea>
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5 flex justify-between">
                                     <span>Template Penolakan Booking</span>
                                     <button onclick="resetNotifTemplate('reject')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
                                 </label>
-                                <textarea id="notif-msg-reject" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan penolakan...">${state.notificationConfig.msgReject || ''}</textarea>
+                                <textarea id="notif-msg-reject" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan penolakan...">${state.notificationConfig?.msgReject || ''}</textarea>
                             </div>
                         </div>
                         <div class="space-y-4">
@@ -2669,12 +2673,9 @@ function renderConfigView(container) {
                                     <span>Template Reminder Harian</span>
                                     <button onclick="resetNotifTemplate('reminder')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
                                 </label>
-                                <textarea id="notif-msg-reminder" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-80 leading-relaxed" placeholder="Masukkan template pesan reminder...">${state.notificationConfig.msgReminder || ''}</textarea>
+                                <textarea id="notif-msg-reminder" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-80 leading-relaxed" placeholder="Masukkan template pesan reminder...">${state.notificationConfig?.msgReminder || ''}</textarea>
                                 <p class="text-[10px] text-slate-400 mt-2">Dukungan variabel tambahan: <span class="font-mono">{{address}}</span>, <span class="font-mono">{{maps_url}}</span>, <span class="font-mono">{{notes}}</span></p>
                             </div>
-                        </div>
-                    </div>
-                </div>
                         </div>
                     </div>
                 </div>
