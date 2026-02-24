@@ -67,6 +67,7 @@ function doGet(e) {
     // ACTION: GET CLINIC INFO BY ALIAS (For Booking Page)
     if (action === "get_clinic_info") {
         const alias = e.parameter.alias;
+        const selectedDate = e.parameter.date; // Parameter baru untuk filter jam
         if (!alias) return createJSONOutput({ status: 'error', message: 'Alias kosong' });
         const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
         if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
@@ -74,7 +75,7 @@ function doGet(e) {
         const data = sheet.getDataRange().getValues();
         if (data.length < 2) return createJSONOutput({ status: 'error', message: 'Data lisensi kosong.' });
         
-        // Dynamic header lookup - find column index by header name (case-insensitive)
+        // Dynamic header lookup
         const headers = data[0].map(h => String(h).toLowerCase().trim());
         const colAlias = headers.indexOf('alias');
         const colStatus = headers.indexOf('status');
@@ -86,11 +87,36 @@ function doGet(e) {
         
         const row = data.find((r, i) => i > 0 && r[colAlias] && String(r[colAlias]).toLowerCase().trim() === String(alias).toLowerCase().trim() && String(r[colStatus]).trim() === 'ACTIVE');
         if (row) {
-            const hours = colHours !== -1 && row[colHours] ? String(row[colHours]).split(',').map(h => h.trim()) : ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
+            let hours = colHours !== -1 && row[colHours] ? String(row[colHours]).split(',').map(h => h.trim()) : ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
+            const sheetId = colSheetId !== -1 ? row[colSheetId] : '';
+
+            // LOGIKA FILTER SLOT TERISI
+            if (selectedDate && sheetId) {
+                try {
+                    const clientSS = SpreadsheetApp.openById(sheetId);
+                    const apptSheet = clientSS.getSheetByName(SHEET_NAMES.APPOINTMENTS);
+                    if (apptSheet && apptSheet.getLastRow() > 1) {
+                        const apptRows = apptSheet.getDataRange().getValues();
+                        const bookedHours = [];
+                        for (let i = 1; i < apptRows.length; i++) {
+                            let rDate = apptRows[i][2]; // Kolom Date
+                            if (rDate instanceof Date) rDate = Utilities.formatDate(rDate, TIMEZONE, "yyyy-MM-dd");
+                            const rTime = String(apptRows[i][3]).trim(); // Kolom Time
+                            const rStatus = apptRows[i][8]; // Kolom Status
+                            if (rDate === selectedDate && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
+                                bookedHours.push(rTime);
+                            }
+                        }
+                        // Filter jam yang sudah terisi
+                        hours = hours.filter(h => !bookedHours.includes(h));
+                    }
+                } catch (e) { Logger.log("Filter booked hours error: " + e); }
+            }
+
             return createJSONOutput({
                 status: 'success',
                 clinic_name: colName !== -1 ? row[colName] : 'Klinik',
-                sheet_id: colSheetId !== -1 ? row[colSheetId] : '',
+                sheet_id: sheetId,
                 available_hours: hours
             });
         } else {

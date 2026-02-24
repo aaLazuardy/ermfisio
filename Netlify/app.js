@@ -1638,6 +1638,18 @@ function saveAssessment() {
     // TIMESTAMP UPDATE
     data.updatedAt = new Date().toISOString();
 
+    // SINKRONISASI KE APPOINTMENT: Update fee di appointment yang sesuai
+    const apptIdx = (state.appointments || []).findIndex(a =>
+        a.patientId === data.patientId &&
+        a.date === data.date &&
+        (a.status === 'CONFIRMED' || !a.status) &&
+        (a.paymentStatus !== 'PAID')
+    );
+    if (apptIdx > -1) {
+        state.appointments[apptIdx].fee = data.fee;
+        console.log(`Synced fee ${data.fee} to appointment ${state.appointments[apptIdx].id}`);
+    }
+
     saveData();
     if (state.scriptUrl) pushDataToSheet();
 
@@ -4187,8 +4199,16 @@ function openPaymentModal(apptId) {
     const p = (state.patients || []).find(pt => pt.id === a.patientId);
     const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien Baru');
 
-    // Ambil fee dari appointment, jika kosong ambil defaultFee dari pasien
-    const feeBase = Number(a.fee) || (p ? Number(p.defaultFee) : 0) || 0;
+    // Ambil fee dari appointment, jika kosong ambil dari assessment terakhir di hari yang sama, jika masih kosong ambil defaultFee
+    let feeBase = parseRp(a.fee);
+    if (feeBase === 0) {
+        const lastAsm = (state.assessments || []).find(asm => asm.patientId === a.patientId && asm.date === a.date);
+        if (lastAsm && lastAsm.fee) feeBase = Number(lastAsm.fee);
+    }
+    if (feeBase === 0 && p) {
+        feeBase = Number(p.defaultFee) || 0;
+    }
+
     const qrisImg = state.clinicInfo.qrisImage || '';
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
