@@ -132,25 +132,58 @@ function formatDateForDisplay(dateStr) {
 
 // --- 3. DATA & INIT ---
 // --- 3. DATA & INIT ---
-function loadData() {
+async function loadData() {
     try {
-        state.patients = JSON.parse(localStorage.getItem('erm_patients')) || [];
-        state.assessments = JSON.parse(localStorage.getItem('erm_assessments')) || [];
-        state.appointments = JSON.parse(localStorage.getItem('erm_appointments')) || [];
-        state.expenses = JSON.parse(localStorage.getItem('erm_expenses')) || [];
-        state.users = JSON.parse(localStorage.getItem('erm_users')) || [];
+        // 1. Inisialisasi Database
+        await window.fisiotaDB.init();
 
-        // Jika user kosong (pertama kali), buat default
+        // 2. Ambil data dari IndexedDB
+        let [patients, assessments, appointments, expenses, users, configs] = await Promise.all([
+            window.fisiotaDB.getAll('patients'),
+            window.fisiotaDB.getAll('assessments'),
+            window.fisiotaDB.getAll('appointments'),
+            window.fisiotaDB.getAll('expenses'),
+            window.fisiotaDB.getAll('users'),
+            window.fisiotaDB.getAll('config')
+        ]);
+
+        // 3. LOGIKA MIGRASI: Jika IndexedDB kosong tapi LocalStorage ada data
+        if (patients.length === 0 && localStorage.getItem('erm_patients')) {
+            console.log("MIGRATION: Moving data from LocalStorage to IndexedDB...");
+            state.patients = JSON.parse(localStorage.getItem('erm_patients')) || [];
+            state.assessments = JSON.parse(localStorage.getItem('erm_assessments')) || [];
+            state.appointments = JSON.parse(localStorage.getItem('erm_appointments')) || [];
+            state.expenses = JSON.parse(localStorage.getItem('erm_expenses')) || [];
+            state.users = JSON.parse(localStorage.getItem('erm_users')) || [];
+
+            // Simpan hasil migrasi ke IndexedDB
+            await saveData();
+        } else {
+            state.patients = patients;
+            state.assessments = assessments;
+            state.appointments = appointments;
+            state.expenses = expenses;
+            state.users = users;
+
+            // Load Global Configs dari store 'config'
+            const globalCfg = configs.find(c => c.id === 'global');
+            if (globalCfg) {
+                state.clinicInfo = globalCfg.info || state.clinicInfo;
+                state.pdfConfig = { ...state.pdfConfig, ...(globalCfg.pdf || {}) };
+                state.notificationConfig = { ...state.notificationConfig, ...(globalCfg.notif || {}) };
+            }
+        }
+
+        // Jika user tetap kosong (pertama kali total), buat default
         if (state.users.length === 0) {
             state.users = [
                 { id: 'usr1', username: 'admin', password: '123', role: 'ADMIN', name: 'Administrator' },
                 { id: 'usr2', username: 'fisio', password: '123', role: 'FISIO', name: 'Fisio' }
             ];
-            localStorage.setItem('erm_users', JSON.stringify(state.users));
+            await window.fisiotaDB.save('users', state.users);
         }
 
-        // --- MIGRATION: Ensure Timestamps ---
-        // If old data exists without timestamps, we mark them as 'updated now' so they get synced once.
+        // --- MIGRATION: Ensure Timestamps & Sanitize ---
         let mig = false;
         const ensureTs = (list) => {
             list.forEach(i => { if (!i.updatedAt) { i.updatedAt = new Date().toISOString(); mig = true; } });
@@ -160,24 +193,18 @@ function loadData() {
         ensureTs(state.appointments);
         ensureTs(state.expenses);
 
-        // --- MIGRATION: Sanitize Array Fields ---
-        // Field seperti pain_points, intervention, b, s, dll bisa tersimpan
-        // sebagai string pada data lama. Paksa menjadi array yang valid.
         const sanitized = sanitizeAssessments(state.assessments);
-        const needsSanitize = JSON.stringify(sanitized) !== JSON.stringify(state.assessments);
-        if (needsSanitize) {
+        if (JSON.stringify(sanitized) !== JSON.stringify(state.assessments)) {
             state.assessments = sanitized;
             mig = true;
-            console.log("Migrating data: Sanitized array fields in legacy assessment records.");
         }
 
         if (mig) {
-            console.log("Migrating data: Added timestamps to legacy records.");
-            saveData();
+            console.log("Data migrated with timestamps/sanitization.");
+            await saveData();
         }
-        // ------------------------------------
 
-        // Script URL Logic
+        // Script URL Logic (Fallback ke localStorage untuk config cepat)
         try {
             if (typeof DEFAULT_SCRIPT_URL !== 'undefined' && DEFAULT_SCRIPT_URL) {
                 state.scriptUrl = DEFAULT_SCRIPT_URL;
@@ -186,13 +213,12 @@ function loadData() {
             }
         } catch (e) { state.scriptUrl = ''; }
 
-        // Configs
+        // Apply Legacy Configs if IndexedDB didn't have them yet
         const savedConfig = JSON.parse(localStorage.getItem('erm_clinic_config'));
-        if (savedConfig) state.clinicInfo = savedConfig;
+        if (savedConfig && !configs.find(c => c.id === 'global')) state.clinicInfo = savedConfig;
 
-        const savedPdfConfig = JSON.parse(localStorage.getItem('erm_pdf_config'));
-        if (savedPdfConfig) {
-            state.pdfConfig = { ...state.pdfConfig, ...savedPdfConfig };
+        // Apply PDF Layout
+        if (state.pdfConfig) {
             document.body.classList.remove('print-compact', 'print-normal', 'print-relaxed');
             if (state.pdfConfig.layoutMode === 'compact') document.body.classList.add('print-compact');
             else if (state.pdfConfig.layoutMode === 'relaxed') document.body.classList.add('print-relaxed');
@@ -200,17 +226,15 @@ function loadData() {
             applyPageMargins(state.pdfConfig.layoutMode);
         }
 
-        const savedNotifConfig = JSON.parse(localStorage.getItem('erm_notif_config'));
-        if (savedNotifConfig) state.notificationConfig = { ...state.notificationConfig, ...savedNotifConfig };
-
-        // Data Pasien Dummy jika kosong
+        // Data Pasien Dummy jika kosong total
         if (state.patients.length === 0) {
             state.patients = [{ id: 'PX-0001', name: 'Contoh Pasien', gender: 'L', dob: '1980-05-12', phone: '08123456789', job: 'Guru', address: 'Jl. Merdeka No. 45, Blitar', diagnosis: 'Cervical Syndrome (M53.1)', quota: 0, defaultFee: 0 }];
+            await window.fisiotaDB.save('patients', state.patients);
         }
 
     } catch (e) {
         console.error("Critical Error loading data:", e);
-        alert("Gagal memuat data lokal. Sistem akan reset.");
+        alert("Gagal memuat data dari IndexedDB. Mencoba fallback...");
     }
 
     applyBranding();
@@ -432,11 +456,23 @@ async function refreshLicenseStatus() {
     }
 }
 
-function saveData() {
-    localStorage.setItem('erm_patients', JSON.stringify(state.patients));
-    localStorage.setItem('erm_assessments', JSON.stringify(state.assessments));
-    localStorage.setItem('erm_appointments', JSON.stringify(state.appointments));
-    localStorage.setItem('erm_expenses', JSON.stringify(state.expenses || []));
+async function saveData() {
+    try {
+        await Promise.all([
+            window.fisiotaDB.save('patients', state.patients),
+            window.fisiotaDB.save('assessments', state.assessments),
+            window.fisiotaDB.save('appointments', state.appointments),
+            window.fisiotaDB.save('expenses', state.expenses || []),
+            window.fisiotaDB.save('users', state.users),
+            window.fisiotaDB.save('config', { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig })
+        ]);
+
+        // Backup ke localStorage untuk metadata penting (fallback cepat)
+        localStorage.setItem('erm_script_url', state.scriptUrl || '');
+        localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
+    } catch (e) {
+        console.error("Database Save Error:", e);
+    }
 }
 
 // Sanitize assessments: pastikan semua field array benar-benar array
@@ -3399,15 +3435,10 @@ function saveSetupUrl() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    checkLicense(); // CEK LISENSI DULUAN
-    // Load data only if license passed (handled inside checkLicense -> renderApp)
-    // Tapi karena checkLicense async, kita perlu modifikasi flow sedikit.
-    // checkLicense akan panggil renderApp() jika sukses.
+document.addEventListener('DOMContentLoaded', async () => {
+    checkLicense();
+    await loadData();
 
-    // Legacy load (tetap jalan di background, tapi UI ditutup Lock Screen jika invalid)
-    loadData();
-    // Start interval etc
     setTimeout(renderIcons, 100);
     setInterval(updateDate, 1000);
     setTimeout(showSyncToast, 2000);
