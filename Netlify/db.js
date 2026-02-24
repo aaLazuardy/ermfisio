@@ -4,7 +4,7 @@
  */
 const DB_NAME = 'FisiotaERM';
 const DB_VERSION = 1;
-const STORES = ['patients', 'assessments', 'appointments', 'expenses', 'users', 'config'];
+const STORES = ['patients', 'assessments', 'appointments', 'expenses', 'users', 'config', 'packages'];
 
 const db = {
     _db: null,

@@ -15,7 +15,8 @@ const SHEET_NAMES = {
     APPOINTMENTS: "Appointments",
     CONFIG: "Config",
     LICENSES: "Licenses",
-    EXPENSES: "Expenses"
+    EXPENSES: "Expenses",
+    PACKAGES: "Packages"
 };
 
 const HEADERS = {
@@ -24,7 +25,8 @@ const HEADERS = {
     APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'paymentStatus', 'paymentMethod', 'discount', 'finalAmount', 'paidAt', 'updatedAt'],
     CONFIG: ['key', 'value', 'updated_at'],
     LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours'],
-    EXPENSES: ['id', 'date', 'category', 'amount', 'notes', 'updatedAt']
+    EXPENSES: ['id', 'date', 'category', 'amount', 'notes', 'updatedAt'],
+    PACKAGES: ['id', 'name', 'sessions', 'price', 'description', 'updatedAt']
 };
 
 // --- 2. MENU & SIDEBAR ---
@@ -130,13 +132,15 @@ function doGet(e) {
             assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
             appointments: getDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS),
             expenses: getDataFromSheet(ss, SHEET_NAMES.EXPENSES),
-            config: getDataFromSheet(ss, SHEET_NAMES.CONFIG)
+            config: getDataFromSheet(ss, SHEET_NAMES.CONFIG),
+            packages: getDataFromSheet(ss, SHEET_NAMES.PACKAGES)
         });
     }
 
     // ACTION: AUTO-UPDATE COLUMNS (Triggered manually or via easy link)
     if (action === "update_database") {
         const logs = checkAndFixColumns(ss);
+        checkAndFixPackagesSheet(ss);
         return createJSONOutput({ status: "success", message: "Database Structure Updated", logs: logs });
     }
 
@@ -233,6 +237,7 @@ function doPost(e) {
                 if (data.assessments) saveDataFixed(ss, SHEET_NAMES.ASSESSMENTS, data.assessments, HEADERS.ASSESSMENTS);
                 if (data.appointments) saveDataFixed(ss, SHEET_NAMES.APPOINTMENTS, data.appointments, HEADERS.APPOINTMENTS);
                 if (data.expenses) saveDataFixed(ss, SHEET_NAMES.EXPENSES, data.expenses, HEADERS.EXPENSES);
+                if (data.packages) saveDataFixed(ss, SHEET_NAMES.PACKAGES, data.packages, HEADERS.PACKAGES);
                 if (data.config) updateConfigSheet(ss, data.config);
                 return createJSONOutput({ status: "success" });
             }
@@ -434,6 +439,18 @@ function getSidebarHtml() {
  * @param {Object} data - Key-value pairs for replacement.
  * @returns {string} - The processed string.
  */
+/**
+ * Helper: Check and fix Packages sheet structure.
+ */
+function checkAndFixPackagesSheet(ss) {
+    let sheet = ss.getSheetByName(SHEET_NAMES.PACKAGES);
+    if (!sheet) {
+        sheet = ss.insertSheet(SHEET_NAMES.PACKAGES);
+        sheet.appendRow(HEADERS.PACKAGES);
+        sheet.getRange(1, 1, 1, HEADERS.PACKAGES.length).setFontWeight('bold').setBackground('#f3f3f3');
+    }
+}
+
 function processPlaceholders(template, data) {
     if (!template) return "";
     let result = template;
