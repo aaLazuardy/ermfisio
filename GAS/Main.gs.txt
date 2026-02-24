@@ -238,9 +238,9 @@ function doPost(e) {
             }
 
             // ACTION: SMART SYNC (INCREMENTAL)
-            if (data.action === "sync_incremental") {
+            if (data.action === "sync_incremental" || data.action === "delta_push") {
                 processIncrementalSync(ss, data);
-                return createJSONOutput({ status: "success", message: "Incremental Sync Completed" });
+                return createJSONOutput({ status: "success", message: "Sync Completed" });
             }
 
             // ACTION: OTP (Reset Password) - LOG TO MASTER SHEET
@@ -428,4 +428,18 @@ function getSidebarHtml() {
     </html>
     `;
 }
-
+/**
+ * Helper: Replace variables in template string.
+ * @param {string} template - The template string with {{key}} placeholders.
+ * @param {Object} data - Key-value pairs for replacement.
+ * @returns {string} - The processed string.
+ */
+function processPlaceholders(template, data) {
+    if (!template) return "";
+    let result = template;
+    for (const key in data) {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        result = result.replace(regex, data[key]);
+    }
+    return result;
+}

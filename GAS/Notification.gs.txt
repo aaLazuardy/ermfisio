@@ -105,7 +105,7 @@ function formatDateIndo(dateStr) {
 // HELPER: Build Pesan Telegram (Jadwal + Laporan)
 // Return: { reminder: string, report: string }
 // ===================================================
-function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo) {
+function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, config) {
     clinicInfo = clinicInfo || {};
     const clinicName = clinicInfo.name || 'FISIOTA';
     const clinicAddress = clinicInfo.address || '';
@@ -137,19 +137,35 @@ function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo) {
         let waLink = "";
 
         if (phone) {
+            const templateData = {
+                name: p.name,
+                clinic_name: clinicName,
+                date: dateIndo,
+                time: a.time,
+                category: p.category || 'Klinik',
+                address: clinicAddress,
+                phone: clinicPhone,
+                maps_url: clinicMaps,
+                notes: a.notes || '-'
+            };
 
-            let waText = `Assalamualaikum 👋\n\nMengingatkan kembali untuk jadwal Fisioterapi hari ini ya: 👇\n\n📅 Tanggal: ${dateIndo}\n⏰ Jam: ${a.time} WIB\n📍 Lokasi: ${p.category || 'Klinik'}`;
+            const defaultReminder = 
+                `Assalamualaikum 👋\n\n` +
+                `Mengingatkan kembali untuk jadwal Fisioterapi hari ini ya: 👇\n\n` +
+                `📅 Tanggal: {{date}}\n` +
+                `⏰ Jam: {{time}} WIB\n` +
+                `📍 Lokasi: {{category}}` +
+                (clinicAddress ? `\n🏥 Alamat: {{address}}` : "") +
+                (clinicPhone ? `\n📞 Kontak: {{phone}}` : "") +
+                (clinicMaps ? `\n🗺️ Maps: {{maps_url}}` : "") +
+                `\n📝 Catatan: {{notes}}\n\n` +
+                `Mohon konfirmasinya. Terima kasih! 🙏\n` +
+                `~ Admin {{clinic_name}}`;
 
-            if (clinicAddress) waText += `\n🏥 Alamat: ${clinicAddress}`;
-
-            if (clinicPhone) waText += `\n📞 Kontak: ${clinicPhone}`;
-
-            if (clinicMaps) waText += `\n🗺️ Maps: ${clinicMaps}`;
-
-            waText += `\n📝 Catatan: ${a.notes || '-'}\n\nMohon konfirmasinya. Terima kasih! 🙏\n~ Admin ${clinicName}`;
+            const reminderTemplate = config ? (config.get('MSG_REMINDER_TEMPLATE') || defaultReminder) : defaultReminder;
+            const waText = processPlaceholders(reminderTemplate, templateData);
 
             waLink = `[Chat WA](https://wa.me/${phone}?text=${encodeURIComponent(waText)})`;
-
         }
 
 
@@ -260,7 +276,7 @@ function processClientNotification(ssClient, clientConfig, targetDateStr, label,
     Logger.log(`   🏥 Klinik: ${clinicInfo.name || 'FISIOTA'}`);
 
     // 4. Build messages
-    const messages = buildReminderMessages(targetAppts, patientMap, targetDateStr, clinicInfo);
+    const messages = buildReminderMessages(targetAppts, patientMap, targetDateStr, clinicInfo, clientConfig);
     const dateIndo = formatDateIndo(targetDateStr);
 
     // 5. Send Telegram berdasarkan mode

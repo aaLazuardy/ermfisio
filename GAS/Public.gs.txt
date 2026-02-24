@@ -144,16 +144,26 @@ function handlePublicBooking(e, data) {
                 }
             } catch(e) { Logger.log('Alias lookup error: ' + e); }
 
+            // Preparation for dynamic templates
+            const templateData = {
+                name: data.name,
+                clinic_name: clinicName,
+                date: dateIndo,
+                time: data.time,
+                complaint: data.complaint || '-',
+                booking_url: bookingUrl
+            };
+
             // WA: Teks Konfirmasi
-            const waConfirmText =
+            const defaultConfirm = 
                 `Assalamualaikum Wr. Wb. 🌟\n\n` +
-                `Halo, Kak ${data.name}! 😊\n\n` +
-                `Kami dari *${clinicName}* dengan senang hati menginformasikan bahwa jadwal Fisioterapi Kakak telah berhasil kami *konfirmasi* ✅\n\n` +
+                `Halo, Kak {{name}}! 😊\n\n` +
+                `Kami dari *{{clinic_name}}* dengan senang hati menginformasikan bahwa jadwal Fisioterapi Kakak telah berhasil kami *konfirmasi* ✅\n\n` +
                 `🗓️ *Detail Jadwal:*\n` +
                 `┌─────────────────────\n` +
-                `│ 📅 Tanggal : ${dateIndo}\n` +
-                `│ ⏰ Jam        : ${data.time} WIB\n` +
-                `│ 📝 Keluhan : ${data.complaint || '-'}\n` +
+                `│ 📅 Tanggal : {{date}}\n` +
+                `│ ⏰ Jam        : {{time}} WIB\n` +
+                `│ 📝 Keluhan : {{complaint}}\n` +
                 `└─────────────────────\n\n` +
                 `📌 *Mohon diperhatikan:*\n` +
                 `• Hadir 5-10 menit sebelum jadwal\n` +
@@ -162,21 +172,28 @@ function handlePublicBooking(e, data) {
                 `Kami tunggu kedatangan Kakak 🙏\n` +
                 `Semoga segera pulih dan sehat selalu! 💪\n\n` +
                 `Wassalamualaikum Wr. Wb.\n` +
-                `~ *Admin ${clinicName}*`;
+                `~ *Admin {{clinic_name}}*`;
 
-            // WA: Teks Tolak + Sarankan Jadwal Lain
-            const waRejectText =
-                `Assalamualaikum Wr. Wb. 🌟\n\n` +
-                `Halo, Kak ${data.name}! 😊\n\n` +
-                `Terima kasih telah mempercayakan kesehatan Kakak kepada *${clinicName}* 🙏\n\n` +
-                `Dengan hormat, kami informasikan bahwa slot waktu yang Kakak pilih:\n` +
-                `📅 *${dateIndo}* pukul *${data.time} WIB*\n` +
-                `saat ini *belum dapat kami terima* dikarenakan jadwal yang sudah penuh. 🙏\n\n` +
-                `*Kami sangat menyarankan* Kakak untuk memilih jadwal alternatif lain yang masih tersedia. Silakan booking ulang melalui link berikut:\n` +
-                `🔗 ${bookingUrl}\n\n` +
-                `Kami mohon maaf atas ketidaknyamanan ini dan berharap dapat segera melayani Kakak di waktu yang lebih sesuai 🌷\n\n` +
-                `Wassalamualaikum Wr. Wb.\n` +
-                `~ *Admin ${clinicName}*`;
+            // WA: Teks Tolak + Sarankan Jadwal Lain
+            const defaultReject = 
+                `Assalamualaikum Wr. Wb. 🌟\n\n` +
+                `Halo, Kak {{name}}! 😊\n\n` +
+                `Terima kasih telah mempercayakan kesehatan Kakak kepada *{{clinic_name}}* 🙏\n\n` +
+                `Dengan hormat, kami informasikan bahwa slot waktu yang Kakak pilih:\n` +
+                `📅 *{{date}}* pukul *{{time}} WIB*\n` +
+                `saat ini *belum dapat kami terima* dikarenakan jadwal yang sudah penuh. 🙏\n\n` +
+                `*Kami sangat menyarankan* Kakak untuk memilih jadwal alternatif lain yang masih tersedia. Silakan booking ulang melalui link berikut:\n` +
+                `🔗 {{booking_url}}\n\n` +
+                `Kami mohon maaf atas ketidaknyamanan ini dan berharap dapat segera melayani Kakak di waktu yang lebih sesuai 🌷\n\n` +
+                `Wassalamualaikum Wr. Wb.\n` +
+                `~ *Admin {{clinic_name}}*`;
+
+            const confirmTemplate = config.get('MSG_CONFIRM_TEMPLATE') || defaultConfirm;
+            const rejectTemplate = config.get('MSG_REJECT_TEMPLATE') || defaultReject;
+
+            const waConfirmText = processPlaceholders(confirmTemplate, templateData);
+            const waRejectText = processPlaceholders(rejectTemplate, templateData);
+
 
             // Build WA links
             const waConfirmLink = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waConfirmText)}` : null;

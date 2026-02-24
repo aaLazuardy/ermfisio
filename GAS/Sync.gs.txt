@@ -146,7 +146,30 @@ function processIncrementalSync(ss, changes) {
     if (changes.patients) merge(SHEET_NAMES.PATIENTS, HEADERS.PATIENTS, changes.patients);
     if (changes.assessments) merge(SHEET_NAMES.ASSESSMENTS, HEADERS.ASSESSMENTS, changes.assessments);
     if (changes.appointments) merge(SHEET_NAMES.APPOINTMENTS, HEADERS.APPOINTMENTS, changes.appointments);
+    if (changes.expenses) merge(SHEET_NAMES.EXPENSES, HEADERS.EXPENSES, changes.expenses);
     if (changes.config) updateConfigSheet(ss, changes.config);
+
+    // Handle Deletions
+    if (changes.deletedIds) {
+        const del = changes.deletedIds;
+        if (del.patients && del.patients.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.PATIENTS), del.patients);
+        if (del.assessments && del.assessments.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.ASSESSMENTS), del.assessments);
+        if (del.appointments && del.appointments.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.APPOINTMENTS), del.appointments);
+        if (del.expenses && del.expenses.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.EXPENSES), del.expenses);
+    }
+}
+
+function deleteRowsById(sheet, ids) {
+    if (!sheet || !ids || ids.length === 0) return;
+    const data = sheet.getDataRange().getValues();
+    const rowsToDelete = [];
+
+    // Search from bottom to top to avoid index shifts
+    for (let i = data.length - 1; i >= 1; i--) {
+        if (ids.indexOf(String(data[i][0])) !== -1) {
+            sheet.deleteRow(i + 1);
+        }
+    }
 }
 
 function createJSONOutput(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
