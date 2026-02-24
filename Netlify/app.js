@@ -611,6 +611,41 @@ function closeSyncToast() {
     if (toast) toast.classList.add('hidden');
 }
 
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-white border-emerald-500 text-emerald-800',
+        error: 'bg-white border-red-500 text-red-800',
+        info: 'bg-white border-blue-500 text-blue-800',
+        warning: 'bg-white border-amber-500 text-amber-800'
+    };
+
+    const icons = {
+        success: 'check-circle',
+        error: 'alert-circle',
+        info: 'info',
+        warning: 'alert-triangle'
+    };
+
+    toast.className = `toast-item flex items-center gap-3 p-4 rounded-xl shadow-2xl border-l-4 ${colors[type] || colors.info} mb-3`;
+    toast.innerHTML = `
+        <i data-lucide="${icons[type] || icons.info}" width="20"></i>
+        <p class="text-sm font-bold">${message}</p>
+    `;
+
+    container.appendChild(toast);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Auto remove after 3s
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- 4. SYNC FUNCTIONS ---
 // Helper to extract ID from URL
 function getSheetIdFromUrl(url) {
