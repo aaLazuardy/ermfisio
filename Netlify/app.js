@@ -4910,10 +4910,18 @@ function printJournalReport(mode = 'GENERAL') {
     // Sort by Date
     filtered.sort((a, b) => (a.paidAt || a.date || "").localeCompare(b.paidAt || b.date || ""));
 
-    // Calculation
+    // Calculation Basis
+    let isOverride = (mode === 'TAX' && state.taxOverride && state.taxOverride.bruto !== undefined);
     let totalDpp = 0;
     let totalTax = 0;
     let totalGrand = 0;
+
+    // Pre-calculate totals for summary
+    if (isOverride) {
+        totalDpp = state.taxOverride.bruto;
+        totalTax = totalDpp * 0.005;
+        totalGrand = totalDpp; // Untuk perhitungan penerimaan di bawah
+    }
 
     const rowsHtml = filtered.map((a, idx) => {
         const patient = state.patients.find(p => p.id === a.patientId) || { name: a.visitor_name || a.name || 'Pasien' };
@@ -4921,9 +4929,11 @@ function printJournalReport(mode = 'GENERAL') {
         const dpp = grandTotal;
         const tax = grandTotal * 0.005;
 
-        totalDpp += dpp;
-        totalTax += tax;
-        totalGrand += grandTotal;
+        if (!isOverride) {
+            totalDpp += dpp;
+            totalTax += tax;
+            totalGrand += grandTotal;
+        }
 
         const dateDisplay = a.paidAt
             ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(a.paidAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
@@ -5020,16 +5030,16 @@ function printJournalReport(mode = 'GENERAL') {
 
             <table class="summary-table">
                 <tr>
-                    <td class="label">Total DPP :</td>
+                    <td class="label">Total DPP${isOverride ? ' (Manual)' : ''} :</td>
                     <td class="value">Rp ${totalDpp.toLocaleString('id-ID')}</td>
                 </tr>
                 <tr>
-                    <td class="label">Total Pajak :</td>
+                    <td class="label">Total Pajak (0.5%) :</td>
                     <td class="value highlight">Rp ${totalTax.toLocaleString('id-ID')}</td>
                 </tr>
                 <tr>
-                    <td class="label">Total Penerimaan :</td>
-                    <td class="value">Rp ${totalGrand.toLocaleString('id-ID')}</td>
+                    <td class="label">Total Penerimaan (Netto) :</td>
+                    <td class="value">Rp ${(totalDpp - totalTax).toLocaleString('id-ID')}</td>
                 </tr>
             </table>
 
