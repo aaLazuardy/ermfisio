@@ -20,6 +20,8 @@ let state = {
     currentView: 'login',
     selectedPatient: null,
     currentAssessment: null,
+    patientLimit: 50,
+    assessmentLimit: 50,
     scriptUrl: '',
     filterPatientId: null,
     laporanLimit: 50,
@@ -48,7 +50,16 @@ let state = {
         telegramToken: '',
         telegramChatId: '',
         targetEmail: '',
-        senderEmail: ''
+        senderEmail: '',
+        msgConfirm: '',
+        msgReject: '',
+        msgReminder: ''
+    },
+    deletedIds: {
+        patients: [],
+        assessments: [],
+        appointments: [],
+        expenses: []
     }
 };
 
@@ -172,6 +183,9 @@ async function loadData() {
                 state.pdfConfig = { ...state.pdfConfig, ...(globalCfg.pdf || {}) };
                 state.notificationConfig = { ...state.notificationConfig, ...(globalCfg.notif || {}) };
             }
+
+            const deleteLog = configs.find(c => c.id === 'deleted_logs');
+            if (deleteLog) state.deletedIds = { ...state.deletedIds, ...deleteLog.ids };
         }
 
         // Jika user tetap kosong (pertama kali total), buat default
@@ -236,6 +250,10 @@ async function loadData() {
         console.error("Critical Error loading data:", e);
         alert("Gagal memuat data dari IndexedDB. Mencoba fallback...");
     }
+
+    // 4. Background Sync & UI Initialization
+    updateSyncStatusUI(checkDataDirty());
+    setInterval(syncDelta, 5 * 60 * 1000); // Tiap 5 menit
 
     applyBranding();
 }
@@ -464,12 +482,17 @@ async function saveData() {
             window.fisiotaDB.save('appointments', state.appointments),
             window.fisiotaDB.save('expenses', state.expenses || []),
             window.fisiotaDB.save('users', state.users),
-            window.fisiotaDB.save('config', { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig })
+            window.fisiotaDB.save('config', [
+                { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig },
+                { id: 'deleted_logs', ids: state.deletedIds }
+            ])
         ]);
 
         // Backup ke localStorage untuk metadata penting (fallback cepat)
         localStorage.setItem('erm_script_url', state.scriptUrl || '');
         localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
+
+        updateSyncStatusUI(checkDataDirty());
     } catch (e) {
         console.error("Database Save Error:", e);
     }
@@ -642,6 +665,94 @@ async function pushDataToSheet() {
     }
 }
 
+async function syncDelta() {
+    if (!state.scriptUrl) return;
+    const sheetId = getSheetIdFromUrl(state.scriptUrl);
+    if (!sheetId) return;
+
+    if (state._syncing) return;
+    state._syncing = true;
+
+    const lastSyncStr = localStorage.getItem('erm_last_sync');
+    const lastSync = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
+
+    const filterDelta = (list) => list.filter(item => {
+        const up = item.updatedAt ? new Date(item.updatedAt) : new Date();
+        return up > lastSync;
+    });
+
+    const deltaPatients = filterDelta(state.patients);
+    const deltaAssessments = filterDelta(state.assessments);
+    const deltaAppointments = filterDelta(state.appointments);
+    const deltaExpenses = filterDelta(state.expenses || []);
+
+    const hasDelta = deltaPatients.length > 0 || deltaAssessments.length > 0 ||
+        deltaAppointments.length > 0 || deltaExpenses.length > 0;
+    const hasDeletes = state.deletedIds.patients.length > 0 || state.deletedIds.assessments.length > 0 ||
+        state.deletedIds.appointments.length > 0 || state.deletedIds.expenses.length > 0;
+
+    if (!hasDelta && !hasDeletes) {
+        state._syncing = false;
+        return;
+    }
+
+    try {
+        await fetch(LICENSE_API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'delta_push',
+                sheet_id: sheetId,
+                patients: deltaPatients,
+                assessments: deltaAssessments,
+                appointments: deltaAppointments,
+                expenses: deltaExpenses,
+                deletedIds: state.deletedIds
+            })
+        });
+
+        // Clear deletedIds on success
+        state.deletedIds = { patients: [], assessments: [], appointments: [], expenses: [] };
+        localStorage.setItem('erm_last_sync', new Date().toISOString());
+        saveData(); // Persist the cleared deletedIds
+        updateSyncStatusUI(false);
+    } catch (e) {
+        console.error("Delta sync failed", e);
+    } finally {
+        state._syncing = false;
+    }
+}
+
+function updateSyncStatusUI(isDirty) {
+    const indicator = document.getElementById('sync-indicator');
+    if (!indicator) return;
+
+    if (isDirty) {
+        indicator.innerHTML = `<span class="flex items-center gap-1 text-orange-500 animate-pulse"><i data-lucide="cloud-off" width="14"></i> <span class="text-[10px] font-bold uppercase">Pending</span></span>`;
+    } else {
+        indicator.innerHTML = `<span class="flex items-center gap-1 text-emerald-500"><i data-lucide="cloud-check" width="14"></i> <span class="text-[10px] font-bold uppercase">Synced</span></span>`;
+    }
+    lucide.createIcons();
+}
+
+function checkDataDirty() {
+    const lastSyncStr = localStorage.getItem('erm_last_sync');
+    if (!lastSyncStr) return true;
+    const lastSync = new Date(lastSyncStr);
+
+    const hasDirty = (list) => list.some(item => {
+        const up = item.updatedAt ? new Date(item.updatedAt) : new Date();
+        return up > lastSync;
+    });
+
+    const hasDeletes = state.deletedIds.patients.length > 0 || state.deletedIds.assessments.length > 0 ||
+        state.deletedIds.appointments.length > 0 || state.deletedIds.expenses.length > 0;
+
+    return hasDirty(state.patients) || hasDirty(state.assessments) ||
+        hasDirty(state.appointments) || hasDirty(state.expenses || []) || hasDeletes;
+}
+
 async function pullDataFromSheet() {
     if (!state.scriptUrl) { alert('URL Google Sheet belum dikonfigurasi.'); return; }
 
@@ -671,9 +782,6 @@ async function pullDataFromSheet() {
             // Sync Config if available
             if (data.config && Array.isArray(data.config)) {
                 data.config.forEach(c => {
-                    if (c.key === 'clinic_info' && c.value) {
-                        try { state.clinicInfo = { ...state.clinicInfo, ...JSON.parse(c.value) }; } catch (e) { }
-                    }
                     if (c.key === 'CLINIC_NAME') state.clinicInfo.name = c.value;
                     if (c.key === 'CLINIC_SUBNAME') state.clinicInfo.subname = c.value;
                     if (c.key === 'CLINIC_THERAPIST') state.clinicInfo.therapist = c.value;
@@ -682,8 +790,16 @@ async function pullDataFromSheet() {
                     if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
                     if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
                     if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
+                    if (c.key === 'TELEGRAM_TOKEN') state.notificationConfig.telegramToken = c.value;
+                    if (c.key === 'TELEGRAM_CHAT_ID') state.notificationConfig.telegramChatId = c.value;
+                    if (c.key === 'EMAIL_RECEIVER') state.notificationConfig.targetEmail = c.value;
+                    if (c.key === 'EMAIL_SENDER') state.notificationConfig.senderEmail = c.value;
+                    if (c.key === 'MSG_CONFIRM_TEMPLATE') state.notificationConfig.msgConfirm = c.value;
+                    if (c.key === 'MSG_REJECT_TEMPLATE') state.notificationConfig.msgReject = c.value;
+                    if (c.key === 'MSG_REMINDER_TEMPLATE') state.notificationConfig.msgReminder = c.value;
                 });
                 localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
+                localStorage.setItem('erm_notif_config', JSON.stringify(state.notificationConfig));
             }
 
             saveData();
@@ -1178,8 +1294,17 @@ function filterPatients() {
         return;
     }
 
+    const hasMore = filtered.length > state.patientLimit;
+    const loadMoreBtn = hasMore ? `
+        <div class="pt-4 pb-8 flex justify-center">
+            <button onclick="loadMorePatients()" class="bg-white border border-slate-300 text-slate-700 px-8 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2">
+                <i data-lucide="plus" width="16"></i> Tampilkan Lebih Banyak (${filtered.length - state.patientLimit})
+            </button>
+        </div>` : '';
+
     if (tbody) {
-        tbody.innerHTML = filtered.map(p => {
+        const sliced = filtered.slice(0, state.patientLimit);
+        tbody.innerHTML = sliced.map(p => {
             const cat = p.category || 'Klinik';
             const badgeClass = cat === 'Home Visit' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200';
             const catIcon = cat === 'Home Visit' ? 'home' : 'building-2';
@@ -1205,11 +1330,12 @@ function filterPatients() {
                     </div>
                 </td>
             </tr>`;
-        }).join('');
+        }).join('') + (hasMore ? `<tr><td colspan="5">${loadMoreBtn}</td></tr>` : '');
     }
 
     if (mobileList) {
-        mobileList.innerHTML = filtered.map(p => {
+        const sliced = filtered.slice(0, state.patientLimit);
+        mobileList.innerHTML = sliced.map(p => {
             const cat = p.category || 'Klinik'; const isVisit = cat === 'Home Visit';
             const borderLeftClass = isVisit ? 'border-l-4 border-l-orange-500' : 'border-l-4 border-l-blue-500';
             let quotaDisplay = p.quota > 0 ? `<div class="absolute top-3 right-3 bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[9px] font-bold border border-purple-200 flex items-center gap-1"><i data-lucide="package" width="10"></i> ${p.quota}</div>` : '';
@@ -1231,10 +1357,16 @@ function filterPatients() {
                     <button onclick="deletePatient('${p.id}')" class="flex flex-col items-center justify-center gap-1 py-2 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"><div class="bg-red-50 text-red-600 p-1.5 rounded-md"><i data-lucide="trash-2" width="16"></i></div><span class="text-[10px] font-bold">Hapus</span></button>
                 </div>
             </div>`;
-        }).join('');
+        }).join('') + loadMoreBtn;
     }
     renderIcons();
 }
+
+function loadMorePatients() {
+    state.patientLimit += 50;
+    filterPatients();
+}
+
 
 function viewPatientHistory(id) {
     state.filterPatientId = id;
@@ -1249,6 +1381,9 @@ function startAssessment(pid) {
 
 function deletePatient(id) {
     if (confirm('Yakin ingin menghapus pasien ini? Data assessment terkait juga akan hilang.')) {
+        // Track for Delta Sync
+        state.deletedIds.patients.push(id);
+
         state.patients = state.patients.filter(p => p.id !== id);
         state.assessments = state.assessments.filter(a => a.patientId !== id);
         saveData();
@@ -1276,6 +1411,14 @@ function renderAssessmentList(container) {
         return dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     };
 
+    const hasMoreAssessments = filteredAssessments.length > state.assessmentLimit;
+    const loadMoreBtn = hasMoreAssessments ? `
+        <div class="pt-4 pb-8 flex justify-center">
+            <button onclick="loadMoreAssessments()" class="bg-white border border-slate-300 text-slate-700 px-8 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2">
+                <i data-lucide="plus" width="16"></i> Tampilkan Lebih Banyak (${filteredAssessments.length - state.assessmentLimit})
+            </button>
+        </div>` : '';
+
     container.innerHTML = `
         <div class="space-y-4 fade-in pb-24"> <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-3">
             <div><h3 class="font-bold text-lg text-slate-800 leading-tight">${headerText}</h3><p class="text-xs text-slate-500">Total: ${filteredAssessments.length} data</p></div>
@@ -1291,7 +1434,7 @@ function renderAssessmentList(container) {
                         <tr><th class="p-4 w-10 text-center"><input type="checkbox" onchange="toggleAllSelect(this)" class="accent-blue-600 cursor-pointer"></th><th class="p-4">Tanggal</th><th class="p-4">Pasien</th><th class="p-4">Diagnosa</th><th class="p-4 text-center">Aksi</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        ${filteredAssessments.length === 0 ? '<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Belum ada data.</td></tr>' : filteredAssessments.map(a => {
+                        ${filteredAssessments.length === 0 ? '<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Belum ada data.</td></tr>' : filteredAssessments.slice(0, state.assessmentLimit).map(a => {
         const p = state.patients.find(pt => pt.id === a.patientId);
         return `<tr class="hover:bg-blue-50 transition-colors">
                                 <td class="p-4 text-center"><input type="checkbox" class="sel-check accent-blue-600 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></td>
@@ -1304,12 +1447,12 @@ function renderAssessmentList(container) {
                                     <button onclick="deleteAssessment('${a.id}')" class="p-1.5 bg-white border border-slate-200 text-slate-500 hover:text-red-600 rounded shadow-sm" title="Hapus"><i data-lucide="trash-2" width="16"></i></button>
                                 </td>
                             </tr>`;
-    }).join('')}
+    }).join('') + (hasMoreAssessments ? `<tr><td colspan="5">${loadMoreBtn}</td></tr>` : '')}
                     </tbody>
                 </table>
             </div>
             <div class="md:hidden divide-y divide-slate-100">
-                ${filteredAssessments.length === 0 ? '<div class="p-8 text-center text-slate-400 italic">Belum ada data.</div>' : filteredAssessments.map(a => {
+                ${filteredAssessments.length === 0 ? '<div class="p-8 text-center text-slate-400 italic">Belum ada data.</div>' : filteredAssessments.slice(0, state.assessmentLimit).map(a => {
         const p = state.patients.find(pt => pt.id === a.patientId);
         return `<div class="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
                         <div class="pt-1"><input type="checkbox" class="sel-check w-5 h-5 accent-blue-600 rounded border-slate-300 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></div>
@@ -1323,11 +1466,16 @@ function renderAssessmentList(container) {
                             </div>
                         </div>
                     </div>`;
-    }).join('')}
+    }).join('') + loadMoreBtn}
             </div>
         </div>
     </div>`;
     renderIcons();
+}
+
+function loadMoreAssessments() {
+    state.assessmentLimit += 50;
+    renderAssessmentList(document.getElementById('main-content'));
 }
 
 function toggleAllSelect(el) {
@@ -1350,6 +1498,9 @@ function updatePrintSelection() {
 
 function deleteAssessment(id) {
     if (confirm('Hapus data assessment ini?')) {
+        // Track for Delta Sync
+        state.deletedIds.assessments.push(id);
+
         state.assessments = state.assessments.filter(a => a.id !== id);
         saveData();
         renderAssessmentList(document.getElementById('main-content'));
@@ -1953,11 +2104,24 @@ function deleteAppointment(id) {
     const appt = state.appointments.find(a => a.id === id);
     if (appt && appt.groupId) {
         showSeriesOptions("Hapus Jadwal Berulang", "Apakah Anda ingin menghapus jadwal ini saja atau seluruh paket?",
-            () => { state.appointments = state.appointments.filter(a => a.id !== id); finalizeDelete(); },
-            () => { state.appointments = state.appointments.filter(a => a.groupId !== appt.groupId); finalizeDelete(); }
+            () => {
+                state.deletedIds.appointments.push(id);
+                state.appointments = state.appointments.filter(a => a.id !== id);
+                finalizeDelete();
+            },
+            () => {
+                const toDel = state.appointments.filter(a => a.groupId === appt.groupId).map(a => a.id);
+                state.deletedIds.appointments.push(...toDel);
+                state.appointments = state.appointments.filter(a => a.groupId !== appt.groupId);
+                finalizeDelete();
+            }
         );
     } else {
-        if (confirm('Hapus jadwal ini?')) { state.appointments = state.appointments.filter(a => a.id !== id); finalizeDelete(); }
+        if (confirm('Hapus jadwal ini?')) {
+            state.deletedIds.appointments.push(id);
+            state.appointments = state.appointments.filter(a => a.id !== id);
+            finalizeDelete();
+        }
     }
 }
 
@@ -2339,6 +2503,43 @@ function renderConfigView(container) {
                                     <p class="text-[10px] text-slate-400 mt-1 italic">Kosongkan jika ingin menggunakan email akun utama Google.</p>
                                 </div>
                             </div>
+
+                <!-- Custom WhatsApp Message Templates -->
+                <div class="mt-8 border-t border-slate-100 pt-6">
+                    <h4 class="font-bold text-slate-800 flex items-center gap-2 mb-4"><i data-lucide="message-square-plus" width="18"></i> Kustomisasi Pesan WhatsApp</h4>
+                    <p class="text-xs text-slate-500 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100 italic">
+                        Gunakan placeholder: <span class="font-mono text-blue-600 font-bold">{{name}}</span>, <span class="font-mono text-blue-600 font-bold">{{date}}</span>, <span class="font-mono text-blue-600 font-bold">{{time}}</span>, <span class="font-mono text-blue-600 font-bold">{{clinic_name}}</span>, <span class="font-mono text-blue-600 font-bold">{{complaint}}</span>, <span class="font-mono text-blue-600 font-bold">{{booking_url}}</span>
+                    </p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5 flex justify-between">
+                                    <span>Template Konfirmasi Booking</span>
+                                    <button onclick="resetNotifTemplate('confirm')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
+                                </label>
+                                <textarea id="notif-msg-confirm" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan konfirmasi...">${state.notificationConfig.msgConfirm || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5 flex justify-between">
+                                    <span>Template Penolakan Booking</span>
+                                    <button onclick="resetNotifTemplate('reject')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
+                                </label>
+                                <textarea id="notif-msg-reject" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-40 leading-relaxed" placeholder="Masukkan template pesan penolakan...">${state.notificationConfig.msgReject || ''}</textarea>
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5 flex justify-between">
+                                    <span>Template Reminder Harian</span>
+                                    <button onclick="resetNotifTemplate('reminder')" class="text-[10px] text-blue-600 hover:underline">Reset Default</button>
+                                </label>
+                                <textarea id="notif-msg-reminder" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium h-80 leading-relaxed" placeholder="Masukkan template pesan reminder...">${state.notificationConfig.msgReminder || ''}</textarea>
+                                <p class="text-[10px] text-slate-400 mt-2">Dukungan variabel tambahan: <span class="font-mono">{{address}}</span>, <span class="font-mono">{{maps_url}}</span>, <span class="font-mono">{{notes}}</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                         </div>
                     </div>
                 </div>
@@ -2577,8 +2778,12 @@ async function saveNotificationConfig() {
     state.notificationConfig.telegramChatId = document.getElementById('notif-tg-chatid').value.trim();
     state.notificationConfig.targetEmail = document.getElementById('notif-email-target').value.trim();
     state.notificationConfig.senderEmail = document.getElementById('notif-email-sender').value.trim();
+    state.notificationConfig.msgConfirm = document.getElementById('notif-msg-confirm').value;
+    state.notificationConfig.msgReject = document.getElementById('notif-msg-reject').value;
+    state.notificationConfig.msgReminder = document.getElementById('notif-msg-reminder').value;
 
     localStorage.setItem('erm_notif_config', JSON.stringify(state.notificationConfig));
+    saveData(); // Persistent to IndexedDB
 
     // Sync to Cloud if Connected
     if (state.scriptUrl) {
@@ -2601,7 +2806,10 @@ async function saveNotificationConfig() {
                     { key: 'TELEGRAM_TOKEN', value: state.notificationConfig.telegramToken },
                     { key: 'TELEGRAM_CHAT_ID', value: state.notificationConfig.telegramChatId },
                     { key: 'EMAIL_RECEIVER', value: state.notificationConfig.targetEmail },
-                    { key: 'EMAIL_SENDER', value: state.notificationConfig.senderEmail }
+                    { key: 'EMAIL_SENDER', value: state.notificationConfig.senderEmail },
+                    { key: 'MSG_CONFIRM_TEMPLATE', value: state.notificationConfig.msgConfirm },
+                    { key: 'MSG_REJECT_TEMPLATE', value: state.notificationConfig.msgReject },
+                    { key: 'MSG_REMINDER_TEMPLATE', value: state.notificationConfig.msgReminder }
                 ];
 
                 // CRITICAL FIX: Use LICENSE_API_URL (The App Script), NOT state.scriptUrl (The Sheet)
@@ -4890,5 +5098,18 @@ async function autoSyncPayment(appt) {
         console.log('Payment synced to Google Sheet:', appt.id);
     } catch (e) {
         console.warn('Auto-sync payment failed (will sync on next manual push):', e);
+    }
+}
+
+function resetNotifTemplate(type) {
+    const defaults = {
+        confirm: `Assalamualaikum Wr. Wb. 🌟\n\nHalo, Kak {{name}}! 😊\n\nKami dari *{{clinic_name}}* dengan senang hati menginformasikan bahwa jadwal Fisioterapi Kakak telah berhasil kami *konfirmasi* ✅\n\n🗓️ *Detail Jadwal:*\n┌─────────────────────\n│ 📅 Tanggal : {{date}}\n│ ⏰ Jam        : {{time}} WIB\n│ 📝 Keluhan : {{complaint}}\n└─────────────────────\n\n📌 *Mohon diperhatikan:*\n• Hadir 5-10 menit sebelum jadwal\n• Gunakan pakaian yang nyaman\n• Jika ada perubahan, mohon hubungi kami sebelumnya\n\nKami tunggu kedatangan Kakak 🙏\nSemoga segera pulih dan sehat selalu! 💪\n\nWassalamualaikum Wr. Wb.\n~ *Admin {{clinic_name}}*`,
+        reject: `Assalamualaikum Wr. Wb. 🌟\n\nHalo, Kak {{name}}! 😊\n\nTerima kasih telah mempercayakan kesehatan Kakak kepada *{{clinic_name}}* 🙏\n\nDengan hormat, kami informasikan bahwa slot waktu yang Kakak pilih:\n📅 *{{date}}* pukul *{{time}} WIB*\nsaat ini *belum dapat kami terima* dikarenakan jadwal yang sudah penuh. 🙏\n\n*Kami sangat menyarankan* Kakak untuk memilih jadwal alternatif lain yang masih tersedia. Silakan booking ulang melalui link berikut:\n🔗 {{booking_url}}\n\nKami mohon maaf atas ketidaknyamanan ini dan berharap dapat segera melayani Kakak di waktu yang lebih sesuai 🌷\n\nWassalamualaikum Wr. Wb.\n~ *Admin {{clinic_name}}*`,
+        reminder: `Assalamualaikum 👋\n\nMengingatkan kembali untuk jadwal Fisioterapi hari ini ya: 👇\n\n📅 Tanggal: {{date}}\n⏰ Jam: {{time}} WIB\n📍 Lokasi: {{category}}\n🏥 Alamat: {{address}}\n📞 Kontak: {{phone}}\n🗺️ Maps: {{maps_url}}\n📝 Catatan: {{notes}}\n\nMohon konfirmasinya. Terima kasih! 🙏\n~ Admin {{clinic_name}}`
+    };
+
+    if (confirm("Reset template ini ke pengaturan bawaan?")) {
+        const el = document.getElementById(`notif-msg-${type}`);
+        if (el) el.value = defaults[type];
     }
 }
