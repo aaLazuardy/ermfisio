@@ -16,6 +16,7 @@ let state = {
     assessments: [],
     appointments: [],
     expenses: [],
+    packages: [],
     printSelection: [],
     currentView: 'login',
     selectedPatient: null,
@@ -59,7 +60,8 @@ let state = {
         patients: [],
         assessments: [],
         appointments: [],
-        expenses: []
+        expenses: [],
+        packages: []
     }
 };
 
@@ -150,13 +152,14 @@ async function loadData() {
         await window.fisiotaDB.init();
 
         // 2. Ambil data dari IndexedDB
-        let [patients, assessments, appointments, expenses, users, configs] = await Promise.all([
+        let [patients, assessments, appointments, expenses, users, configs, packages] = await Promise.all([
             window.fisiotaDB.getAll('patients'),
             window.fisiotaDB.getAll('assessments'),
             window.fisiotaDB.getAll('appointments'),
             window.fisiotaDB.getAll('expenses'),
             window.fisiotaDB.getAll('users'),
-            window.fisiotaDB.getAll('config')
+            window.fisiotaDB.getAll('config'),
+            window.fisiotaDB.getAll('packages')
         ]);
 
         // 3. LOGIKA MIGRASI: Jika IndexedDB kosong tapi LocalStorage ada data
@@ -167,6 +170,7 @@ async function loadData() {
             state.appointments = JSON.parse(localStorage.getItem('erm_appointments')) || [];
             state.expenses = JSON.parse(localStorage.getItem('erm_expenses')) || [];
             state.users = JSON.parse(localStorage.getItem('erm_users')) || [];
+            state.packages = JSON.parse(localStorage.getItem('erm_packages')) || [];
 
             // Simpan hasil migrasi ke IndexedDB
             await saveData();
@@ -176,6 +180,7 @@ async function loadData() {
             state.appointments = appointments;
             state.expenses = expenses;
             state.users = users;
+            state.packages = packages;
 
             // Load Global Configs dari store 'config'
             const globalCfg = configs.find(c => c.id === 'global');
@@ -207,6 +212,7 @@ async function loadData() {
         ensureTs(state.assessments);
         ensureTs(state.appointments);
         ensureTs(state.expenses);
+        ensureTs(state.packages);
 
         const sanitized = sanitizeAssessments(state.assessments);
         if (JSON.stringify(sanitized) !== JSON.stringify(state.assessments)) {
@@ -482,6 +488,7 @@ async function saveData() {
             window.fisiotaDB.save('assessments', state.assessments),
             window.fisiotaDB.save('appointments', state.appointments),
             window.fisiotaDB.save('expenses', state.expenses || []),
+            window.fisiotaDB.save('packages', state.packages || []),
             window.fisiotaDB.save('users', state.users),
             window.fisiotaDB.save('config', [
                 { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig },
@@ -684,6 +691,7 @@ async function pushDataToSheet() {
                 assessments: ensureTs(state.assessments),
                 appointments: ensureTs(state.appointments),
                 expenses: ensureTs(state.expenses || []),
+                packages: ensureTs(state.packages || []),
                 config: state.clinicInfo ? [{ key: 'clinic_info', value: JSON.stringify(state.clinicInfo) }] : []
             })
         });
@@ -721,11 +729,12 @@ async function syncDelta() {
     const deltaAssessments = filterDelta(state.assessments);
     const deltaAppointments = filterDelta(state.appointments);
     const deltaExpenses = filterDelta(state.expenses || []);
+    const deltaPackages = filterDelta(state.packages || []);
 
     const hasDelta = deltaPatients.length > 0 || deltaAssessments.length > 0 ||
-        deltaAppointments.length > 0 || deltaExpenses.length > 0;
+        deltaAppointments.length > 0 || deltaExpenses.length > 0 || deltaPackages.length > 0;
     const hasDeletes = state.deletedIds.patients.length > 0 || state.deletedIds.assessments.length > 0 ||
-        state.deletedIds.appointments.length > 0 || state.deletedIds.expenses.length > 0;
+        state.deletedIds.appointments.length > 0 || state.deletedIds.expenses.length > 0 || state.deletedIds.packages.length > 0;
 
     if (!hasDelta && !hasDeletes) {
         state._syncing = false;
@@ -744,12 +753,13 @@ async function syncDelta() {
                 assessments: deltaAssessments,
                 appointments: deltaAppointments,
                 expenses: deltaExpenses,
+                packages: deltaPackages,
                 deletedIds: state.deletedIds
             })
         });
 
         // Clear deletedIds on success
-        state.deletedIds = { patients: [], assessments: [], appointments: [], expenses: [] };
+        state.deletedIds = { patients: [], assessments: [], appointments: [], expenses: [], packages: [] };
         localStorage.setItem('erm_last_sync', new Date().toISOString());
         saveData(); // Persist the cleared deletedIds
         updateSyncStatusUI(false);
@@ -786,7 +796,7 @@ function checkDataDirty() {
         state.deletedIds.appointments.length > 0 || state.deletedIds.expenses.length > 0;
 
     return hasDirty(state.patients) || hasDirty(state.assessments) ||
-        hasDirty(state.appointments) || hasDirty(state.expenses || []) || hasDeletes;
+        hasDirty(state.appointments) || hasDirty(state.expenses || []) || hasDirty(state.packages || []) || hasDeletes;
 }
 
 async function pullDataFromSheet() {
@@ -814,6 +824,7 @@ async function pullDataFromSheet() {
             state.assessments = sanitizeAssessments(data.assessments);
             if (data.appointments) state.appointments = data.appointments;
             if (data.expenses) state.expenses = data.expenses;
+            if (data.packages) state.packages = data.packages;
 
             // Sync Config if available
             if (data.config && Array.isArray(data.config)) {
@@ -2285,6 +2296,13 @@ function openPatientModal(id = null) {
                 </div>
                 <div class="bg-purple-50 p-3 rounded-lg border border-purple-200">
                     <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold text-purple-800 uppercase flex items-center gap-1"><i data-lucide="package" width="14"></i> Paket & Tarif</label><span class="text-[10px] text-purple-600 bg-white px-2 py-0.5 rounded border border-purple-100">Opsional</span></div>
+                    <div class="mb-3">
+                        <label class="text-[10px] text-purple-700 block mb-1">Pilih Paket (Auto-Fill)</label>
+                        <select onchange="applyPackageToPatient(this.value)" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white font-medium">
+                            <option value="">-- Custom / Tanpa Paket --</option>
+                            ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
+                        </select>
+                    </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div><label class="text-[10px] text-purple-700 block mb-1">Sisa Sesi (Kuota)</label><input type="number" name="quota" value="${p.quota || 0}" min="0" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-700"></div>
                         <div><label class="text-[10px] text-purple-700 block mb-1">Tarif Per Datang (Rp)</label><input type="number" name="defaultFee" value="${p.defaultFee || 0}" step="5000" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-700"></div>
@@ -2389,6 +2407,7 @@ function renderConfigView(container) {
                 <button onclick="switchConfigTab('system')" id="tab-btn-system" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2"><i data-lucide="database" width="16"></i> Data & User</button>
                 <button onclick="switchConfigTab('license')" id="tab-btn-license" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2"><i data-lucide="crown" width="16"></i> Status Langganan</button>
                 <button onclick="switchConfigTab('booking')" id="tab-btn-booking" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2"><i data-lucide="calendar-check" width="16"></i> Booking Online</button>
+                <button onclick="switchConfigTab('packages')" id="tab-btn-packages" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2"><i data-lucide="package" width="16"></i> Layanan & Paket</button>
             </div>
         </div>
 
@@ -2483,6 +2502,22 @@ function renderConfigView(container) {
                             </ol>
                         </div>
                     </div>
+                </div>
+            </div>
+        <div id="tab-content-packages" class="config-tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">Daftar Paket & Layanan</h3>
+                        <p class="text-xs text-slate-400">Kelola paket terapi untuk mempermudah pendaftaran pasien</p>
+                    </div>
+                    <button onclick="openPackageModal()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+                        <i data-lucide="plus-circle" width="18"></i> Tambah Paket Baru
+                    </button>
+                </div>
+                
+                <div id="package-list-container" class="overflow-x-auto">
+                    ${renderPackageTable()}
                 </div>
             </div>
         </div>
@@ -2942,8 +2977,9 @@ async function saveNotificationConfig() {
 function switchConfigTab(tabName) {
     document.querySelectorAll('.config-tab-content').forEach(el => el.classList.add('hidden'));
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
-    ['identity', 'print', 'notif', 'system'].forEach(t => {
+    ['identity', 'print', 'notif', 'system', 'license', 'booking', 'packages'].forEach(t => {
         const btn = document.getElementById(`tab-btn-${t}`);
+        if (!btn) return;
         if (t === tabName) btn.className = "px-6 py-3 text-sm font-bold text-blue-600 border-b-2 border-blue-600 bg-white transition-colors flex items-center gap-2";
         else btn.className = "px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2";
     });
@@ -5223,4 +5259,149 @@ function resetNotifTemplate(type) {
         const el = document.getElementById(`notif-msg-${type}`);
         if (el) el.value = defaults[type];
     }
+}
+
+// --- 15.1. PACKAGE MANAGEMENT FUNCTIONS ---
+function renderPackageTable() {
+    const pkgs = state.packages || [];
+    if (pkgs.length === 0) {
+        return `<div class="p-12 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl mb-8">
+                    <i data-lucide="package-search" width="48" class="mx-auto mb-4 opacity-20"></i>
+                    <p class="font-medium">Belum ada paket layanan. <br><span class="text-xs">Klik tombol di atas untuk membuat paket pertama.</span></p>
+                </div>`;
+    }
+
+    const formatRp = (num) => 'Rp ' + Number(num).toLocaleString('id-ID');
+
+    return `<table class="w-full text-sm mb-8">
+        <thead class="bg-slate-50 border-b border-slate-200">
+            <tr>
+                <th class="text-left px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Nama Paket</th>
+                <th class="text-center px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Sesi</th>
+                <th class="text-right px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Harga Total</th>
+                <th class="text-right px-6 py-3 text-[10px] font-bold text-slate-500 uppercase">Per Sesi</th>
+                <th class="text-center px-6 py-3" style="width: 100px;">Aksi</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+            ${pkgs.map(p => {
+        const perSession = Math.round(p.price / p.sessions);
+        return `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-6 py-4">
+                        <p class="font-bold text-slate-800">${p.name}</p>
+                        <p class="text-[10px] text-slate-400 italic">${p.description || '-'}</p>
+                    </td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-600">${p.sessions}</td>
+                    <td class="px-6 py-4 text-right font-black text-slate-700">${formatRp(p.price)}</td>
+                    <td class="px-6 py-4 text-right font-bold text-emerald-600">${formatRp(perSession)}</td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="openPackageModal('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded-lg hover:bg-blue-50 transition-all"><i data-lucide="edit-3" width="16"></i></button>
+                            <button onclick="deletePackage('${p.id}')" class="text-rose-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-all"><i data-lucide="trash-2" width="16"></i></button>
+                        </div>
+                    </td>
+                </tr>`;
+    }).join('')}
+        </tbody>
+    </table>`;
+}
+
+function openPackageModal(id = null) {
+    const p = id ? state.packages.find(x => x.id === id) : { id: '', name: '', sessions: 10, price: 0, description: '' };
+    const modalHtml = `
+        <div class="bg-white px-6 py-4 border-b flex justify-between items-center sticky top-0 z-20">
+            <div>
+                <h3 class="text-xl font-bold text-slate-800">${id ? 'Edit Paket Layanan' : 'Buat Paket Baru'}</h3>
+                <p class="text-xs text-slate-400">Atur harga dan kuota sesi terapi</p>
+            </div>
+            <button onclick="closeModal()" class="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><i data-lucide="x" width="20"></i></button>
+        </div>
+        <div class="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+            <form id="package-form">
+                <input type="hidden" name="id" value="${p.id}">
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5">Nama Paket</label>
+                    <input type="text" name="name" value="${p.name}" class="w-full border-2 border-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold" placeholder="Contoh: Paket Fisioterapi 10 Sesi">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5">Jumlah Sesi</label>
+                        <input type="number" name="sessions" value="${p.sessions}" min="1" class="w-full border-2 border-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-center font-black text-blue-600 text-xl">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5">Harga Total (Rp)</label>
+                        <input type="number" name="price" value="${p.price}" step="10000" class="w-full border-2 border-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-black text-slate-700 text-xl">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1.5">Keterangan / Deskripsi</label>
+                    <textarea name="description" class="w-full border-2 border-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm min-h-[80px]" placeholder="Catatan tambahan paket ini...">${p.description}</textarea>
+                </div>
+            </form>
+        </div>
+        <div class="bg-slate-50 px-6 py-4 border-t flex justify-end gap-3">
+            <button onclick="closeModal()" class="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all text-sm">Batal</button>
+            <button onclick="savePackage()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 text-sm flex items-center gap-2">
+                <i data-lucide="save" width="16"></i> Simpan Paket
+            </button>
+        </div>`;
+    document.getElementById('modal-content').innerHTML = modalHtml;
+    document.getElementById('modal-container').classList.remove('hidden');
+    renderIcons();
+}
+
+function savePackage() {
+    const form = document.getElementById('package-form');
+    const id = form.querySelector('[name="id"]').value;
+    const name = form.querySelector('[name="name"]').value.trim();
+    const sessions = parseInt(form.querySelector('[name="sessions"]').value) || 0;
+    const price = parseInt(form.querySelector('[name="price"]').value) || 0;
+    const description = form.querySelector('[name="description"]').value.trim();
+
+    if (!name || sessions <= 0 || price < 0) { alert('Mohon lengkapi data paket dengan benar!'); return; }
+
+    const pkg = { id: id || 'PKG-' + Date.now(), name, sessions, price, description, updatedAt: new Date().toISOString() };
+
+    if (!state.packages) state.packages = [];
+
+    if (id) {
+        const idx = state.packages.findIndex(x => x.id === id);
+        if (idx > -1) state.packages[idx] = pkg;
+    } else {
+        state.packages.push(pkg);
+    }
+
+    saveData();
+    if (state.scriptUrl) syncDelta();
+    closeModal();
+    renderConfigView(document.getElementById('main-content'));
+    showToast("Paket layanan berhasil disimpan.");
+}
+
+function deletePackage(id) {
+    if (!confirm('Hapus paket layanan ini? Data paket yang sudah digunakan di pasien tetap aman.')) return;
+    state.packages = (state.packages || []).filter(p => p.id !== id);
+    if (!state.deletedIds.packages) state.deletedIds.packages = [];
+    state.deletedIds.packages.push(id);
+
+    saveData();
+    if (state.scriptUrl) syncDelta();
+    const container = document.getElementById('package-list-container');
+    if (container) {
+        container.innerHTML = renderPackageTable();
+        renderIcons();
+    }
+    showToast("Paket dihapus.");
+}
+
+function applyPackageToPatient(packageId) {
+    const pkg = state.packages.find(p => p.id === packageId);
+    if (!pkg) return;
+
+    const quotaInput = document.querySelector('#patient-form [name="quota"]');
+    const feeInput = document.querySelector('#patient-form [name="defaultFee"]');
+
+    if (quotaInput) quotaInput.value = pkg.sessions;
+    if (feeInput) feeInput.value = Math.round(pkg.price / pkg.sessions);
 }
