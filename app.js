@@ -2440,7 +2440,6 @@ function renderConfigView(container) {
                 </button>
             </div>
         </div>
-        </div>
 
         <div id="tab-content-booking" class="config-tab-content hidden">
             <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
@@ -2522,7 +2521,7 @@ function renderConfigView(container) {
             </div>
         </div>
 
-        <div id="tab-content-identity" class="config-tab-content block">
+        <div id="tab-content-identity" class="config-tab-content hidden">
             <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-4">
@@ -2719,6 +2718,7 @@ function renderConfigView(container) {
         </div>
     </div>`;
     lucide.createIcons();
+    switchConfigTab('identity');
 }
 
 async function saveClinicConfig() {
