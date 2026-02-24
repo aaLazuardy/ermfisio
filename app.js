@@ -64,6 +64,7 @@ let state = {
 };
 
 let currentTemplateCategory = 'Semua';
+let templateSearchQuery = '';
 let selectedExercises = [];
 window.tempFormData = {};
 
@@ -1376,6 +1377,7 @@ function viewPatientHistory(id) {
 function startAssessment(pid) {
     state.selectedPatient = state.patients.find(p => p.id === pid);
     state.currentAssessment = null;
+    templateSearchQuery = ''; // Reset ICF search query
     navigate('assessment_form');
 }
 
@@ -1571,23 +1573,40 @@ function renderAssessmentForm(container, useTempData = false) {
                             </button>
                         </div>
                     </div>
-                    <div>
-                        <div class="flex flex-col md:flex-row justify-between items-end mb-4 border-b border-slate-200 pb-2">
-                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 md:mb-0">Pilih Template Kasus (ICF)</h3>
-                            <div class="flex flex-wrap gap-2">
-                                ${['Semua', 'Muskulo', 'Neuro', 'Pediatri', 'Geriatri', 'Sport', 'Kardio'].map(cat => `
-                                    <button onclick="setTemplateCategory('${cat}')" class="text-[10px] uppercase px-3 py-1.5 rounded-full font-bold transition-all border ${currentTemplateCategory === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">${cat}</button>
-                                `).join('')}
+                    <div class="mb-1">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b border-slate-200 pb-4 gap-4">
+                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest self-start md:self-center">Pilih Template Kasus (ICF)</h3>
+                            
+                            <div class="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+                                <!-- Box Pencarian Template -->
+                                <div class="relative w-full md:w-64">
+                                    <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400" width="16"></i>
+                                    <input type="text" id="icf-search" onkeyup="handleTemplateSearch(this.value)" value="${templateSearchQuery}" placeholder="Cari kasus (misal: HNP)..." class="pl-10 w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm">
+                                </div>
+
+                                <div class="flex flex-wrap gap-2 justify-center">
+                                    ${['Semua', 'Muskulo', 'Neuro', 'Pediatri', 'Geriatri', 'Sport', 'Kardio'].map(cat => `
+                                        <button onclick="setTemplateCategory('${cat}')" class="text-[10px] uppercase px-3 py-1.5 rounded-full font-bold transition-all border ${currentTemplateCategory === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">${cat}</button>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
-                            ${Object.keys(ICF_TEMPLATES).filter(t => currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory).map(t => `
+                            ${Object.keys(ICF_TEMPLATES).filter(t => {
+        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
+        const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
+        return matchesCat && matchesSearch;
+    }).map(t => `
                                 <button onclick="selectTemplateAndGo('${t}')" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-lg hover:border-blue-400 hover:-translate-y-1 transition-all text-left group h-full relative overflow-hidden">
                                     <div class="flex items-start justify-between relative z-10"><span class="font-bold text-slate-700 group-hover:text-blue-600 transition-colors line-clamp-2 text-sm">${t}</span><i data-lucide="arrow-right" class="text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all shrink-0" width="16"></i></div>
                                     <div class="mt-3 flex flex-wrap gap-1 relative z-10"><span class="text-[9px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ICD: ${ICF_TEMPLATES[t].icd || '-'}</span>${ICF_TEMPLATES[t].category ? `<span class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold uppercase">${ICF_TEMPLATES[t].category}</span>` : ''}</div>
                                 </button>
                             `).join('')}
-                            ${Object.keys(ICF_TEMPLATES).filter(t => currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory).length === 0 ? `<div class="col-span-full text-center py-10 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-300">Belum ada template untuk kategori <strong>${currentTemplateCategory}</strong></div>` : ''}
+                            ${Object.keys(ICF_TEMPLATES).filter(t => {
+        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
+        const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
+        return matchesCat && matchesSearch;
+    }).length === 0 ? `<div class="col-span-full text-center py-10 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center gap-2"><i data-lucide="search-x" width="40" class="opacity-20"></i><span>Tidak menemukan template yang cocok dengan pencarian <strong>"${templateSearchQuery}"</strong> di kategori <strong>${currentTemplateCategory}</strong></span></div>` : ''}
                         </div>
                     </div>
                 </div>
@@ -1858,7 +1877,22 @@ function selectTemplateAndGo(tName) { applyTemplate(tName); showStep2(); }
 function goToFormManual() { window.tempFormData.diagnosis = ''; showStep2(); }
 function showStep1() { document.getElementById('step-1').classList.remove('hidden'); document.getElementById('step-2').classList.add('hidden'); }
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
-function setTemplateCategory(cat) { currentTemplateCategory = cat; renderAssessmentForm(document.getElementById('main-content'), true); showStep1(); }
+function setTemplateCategory(cat) {
+    currentTemplateCategory = cat;
+    renderAssessmentForm(document.getElementById('main-content'), true);
+    showStep1();
+}
+function handleTemplateSearch(query) {
+    templateSearchQuery = query;
+    renderAssessmentForm(document.getElementById('main-content'), true);
+    // Restore focus to search input
+    const input = document.getElementById('icf-search');
+    if (input) {
+        input.focus();
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+    }
+}
 
 // --- 12. PAIN MAP LOGIC ---
 function addPainPoint(event) {
