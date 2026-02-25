@@ -81,13 +81,16 @@ function doGet(e) {
         const data = sheet.getDataRange().getValues();
         if (data.length < 2) return createJSONOutput({ status: 'error', message: 'Data lisensi kosong.' });
         
-        // Dynamic header lookup
-        const headers = data[0].map(h => String(h).toLowerCase().trim());
-        const colAlias = headers.indexOf('alias');
-        const colStatus = headers.indexOf('status');
-        const colName = headers.indexOf('client_name') !== -1 ? headers.indexOf('client_name') : headers.indexOf('client name');
-        const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
-        const colHours = headers.indexOf('available_hours');
+        // Dynamic header lookup with normalization
+        const headers = data[0];
+        const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+        const headersNormalized = headers.map(normalize);
+
+        const colAlias = headersNormalized.indexOf(normalize('alias'));
+        const colStatus = headersNormalized.indexOf(normalize('status'));
+        const colName = headersNormalized.indexOf(normalize('client_name')) !== -1 ? headersNormalized.indexOf(normalize('client_name')) : headersNormalized.indexOf(normalize('client name'));
+        const colSheetId = headersNormalized.indexOf(normalize('sheet_id')) !== -1 ? headersNormalized.indexOf(normalize('sheet_id')) : headersNormalized.indexOf(normalize('sheet id'));
+        const colHours = headersNormalized.indexOf(normalize('available_hours'));
         
         if (colAlias === -1) return createJSONOutput({ status: 'error', message: 'Kolom Alias tidak ditemukan di tab Licenses.' });
         if (colStatus === -1) return createJSONOutput({ status: 'error', message: 'Kolom Status tidak ditemukan di tab Licenses.' });
@@ -360,11 +363,13 @@ function doPost(e) {
                 const licSheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
                 if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
                 const rows = licSheet.getDataRange().getValues();
-                const headers = rows[0].map(h => String(h).toLowerCase().trim());
+                const headers = rows[0];
+                const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+                const headersNormalized = headers.map(normalize);
                 
-                const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
-                const colAlias = headers.indexOf('alias');
-                const colHours = headers.indexOf('available_hours');
+                const colSheetId = headersNormalized.indexOf(normalize('sheet_id'));
+                const colAlias = headersNormalized.indexOf(normalize('alias'));
+                const colHours = headersNormalized.indexOf(normalize('available_hours'));
                 
                 if (colSheetId === -1 || colAlias === -1 || colHours === -1) {
                    return createJSONOutput({ status: 'error', message: 'Kolom database Master tidak lengkap.' });

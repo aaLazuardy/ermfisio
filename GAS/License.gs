@@ -154,9 +154,12 @@ function resolveClinicAlias(alias) {
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
   
   const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(h => String(h).toLowerCase().trim());
-  const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
-  const colAlias = headers.indexOf('alias');
+  const headers = data[0];
+  const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+  const headersNormalized = headers.map(normalize);
+
+  const colSheetId = headersNormalized.indexOf(normalize('sheet_id'));
+  const colAlias = headersNormalized.indexOf(normalize('alias'));
   
   if (colAlias === -1 || colSheetId === -1) return createJSONOutput({ status: 'error', message: 'Struktur Master tidak lengkap.' });
 
@@ -179,10 +182,13 @@ function registerClinicAlias(licenseKey, alias, sheetId) {
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
   
   const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(h => String(h).toLowerCase().trim());
+  const headers = data[0];
+  const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+  const headersNormalized = headers.map(normalize);
+
   const colKey = 0;
-  const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
-  const colAlias = headers.indexOf('alias');
+  const colSheetId = headersNormalized.indexOf(normalize('sheet_id'));
+  const colAlias = headersNormalized.indexOf(normalize('alias'));
 
   if (colAlias === -1 || colSheetId === -1) return createJSONOutput({ status: 'error', message: 'Struktur Master tidak lengkap.' });
   

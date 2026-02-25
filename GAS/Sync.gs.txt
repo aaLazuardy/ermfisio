@@ -205,8 +205,13 @@ function checkAndFixColumns(ss, isMaster = false) {
         }
 
         const lastCol = sheet.getLastColumn();
-        const currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-        const missingHeaders = item.headers.filter(h => !currentHeaders.includes(h));
+        const currentHeadersRaw = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+        
+        // Normalisasi header yang ada (lowercase + hapus spasi & underscore)
+        const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+        const currentHeadersNormalized = currentHeadersRaw.map(normalize);
+
+        const missingHeaders = item.headers.filter(h => !currentHeadersNormalized.includes(normalize(h)));
 
         if (missingHeaders.length > 0) {
             const startCol = lastCol + 1;
