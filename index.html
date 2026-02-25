@@ -119,7 +119,11 @@
             <button type="button" onclick="navigate('assessments'); toggleSidebar()"
                class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"
                id="nav-assessments">
-               <i data-lucide="file-text" width="20"></i> <span class="font-medium">Assessment ICF</span>
+               <i data-lucide="file-text" width="20"></i>
+               <span class="font-medium flex-1 text-left">Assessment ICF</span>
+               <span id="nav-assessments-badge" class="hidden">
+                  <i data-lucide="loader-2" class="animate-spin text-blue-400" width="16"></i>
+               </span>
             </button>
             <button type="button" onclick="navigate('kasir'); toggleSidebar()"
                class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 btn-press text-slate-300 hover:bg-slate-800 hover:text-white"

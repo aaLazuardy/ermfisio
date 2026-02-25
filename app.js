@@ -67,7 +67,8 @@ let state = {
         appointments: [],
         expenses: [],
         packages: []
-    }
+    },
+    pendingUploads: []
 };
 
 let currentTemplateCategory = 'Semua';
@@ -1948,63 +1949,87 @@ function applyTemplate(tName) {
     renderAssessmentForm(document.getElementById('main-content'), true);
 }
 
-function saveAssessment() {
-    const data = window.tempFormData;
-    if (!data.diagnosis) { alert("Mohon isi diagnosa medis."); return; }
+function updateUploadBadge() {
+    const badge = document.getElementById('nav-assessments-badge');
+    if (!badge) return;
+    if (state.pendingUploads.length > 0) {
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+    } else {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+    }
+}
 
-    // Jika ada file rontgen yang belum diupload (masih base64)
-    if (data.rontgen_base64) {
-        if (!state.scriptUrl) {
-            alert("Gagal: URL Google Script belum dikonfigurasi di menu Pengaturan.");
-            return;
-        }
+async function processBackgroundUpload(assessmentId, fileData, fileName, patientName) {
+    if (!LICENSE_API_URL) return;
 
-        const activeSheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+    // Tambahkan ke antrean
+    if (!state.pendingUploads.includes(assessmentId)) {
+        state.pendingUploads.push(assessmentId);
+    }
+    updateUploadBadge();
 
-        console.log("Centralized Upload via Master Script...");
-        console.log("Target Client Sheet:", activeSheetId);
+    const payload = {
+        action: 'upload_file',
+        fileData: fileData,
+        fileName: fileName,
+        patientName: patientName,
+        sheet_id: state.sheetId || getSheetIdFromUrl(state.scriptUrl)
+    };
 
-        showToast("Sedang mengunggah berkas penunjang...", "info");
-        const payload = {
-            action: 'upload_file',
-            fileData: data.rontgen_base64,
-            fileName: data.rontgen_filename,
-            patientName: (state.patients.find(p => p.id === data.patientId)?.name || 'Unknown'),
-            sheet_id: activeSheetId
-        };
-
-        // SELALU gunakan LICENSE_API_URL (Script Master) untuk upload
-        // Karena klien hanya punya Sheet, tidak punya Script sendiri.
-        fetch(LICENSE_API_URL, {
+    try {
+        const response = await fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
-        })
-            .then(res => {
-                if (res.status === 401) {
-                    throw new Error("HTTP 401 (Unauthorized). Akses Ditolak!\n\n" +
-                        "Penyebab:\n1. URL yang terpasang berakhiran /dev (Gunakan /exec)\n2. Belum klik 'Deploy > New Version' setelah beri izin\n3. Akses belum diset ke 'Anyone'\n\nURL saat ini: ..." + cleanUrl.slice(-20));
-                }
-                if (!res.ok) throw new Error("Server response not OK (HTTP " + res.status + ")");
-                return res.json();
-            })
-            .then(res => {
-                if (res.status === 'success') {
-                    data.rontgen_url = res.fileUrl;
-                    delete data.rontgen_base64;
-                    delete data.rontgen_filename;
-                    finalizeSaveAssessment(data);
-                } else {
-                    alert("Gagal upload file: " + res.message);
-                }
-            })
-            .catch(err => {
-                console.error("Upload error detail:", err);
-                alert("Error upload: " + err.message + "\n\nMohon Cek:\n1. Menu Konfigurasi (Pastikan URL berakhiran /exec)\n2. Deploy ulang GAS sebagai 'New Version'");
-            });
-    } else {
-        finalizeSaveAssessment(data);
+        });
+
+        const res = await response.json();
+
+        if (res.status === 'success') {
+            const idx = state.assessments.findIndex(a => a.id === assessmentId);
+            if (idx !== -1) {
+                state.assessments[idx].rontgen_url = res.fileUrl;
+                state.assessments[idx].uploading = false;
+                state.assessments[idx].updatedAt = new Date().toISOString();
+                saveData();
+                syncDelta();
+            }
+        } else {
+            console.error("Background upload failed:", res.message);
+        }
+    } catch (err) {
+        console.error("Background upload error:", err);
+        // Bisa ditambahkan retry logic di sini jika perlu
+    } finally {
+        state.pendingUploads = state.pendingUploads.filter(id => id !== assessmentId);
+        updateUploadBadge();
+    }
+}
+
+function saveAssessment() {
+    const data = window.tempFormData;
+    if (!data.diagnosis) { alert("Mohon isi diagnosa medis."); return; }
+
+    const fileToUpload = data.rontgen_base64;
+    const fileName = data.rontgen_filename;
+    const patientName = (state.patients.find(p => p.id === data.patientId)?.name || 'Unknown');
+
+    // Jika ada file rontgen, tandai sedang upload dan bersihkan dari data utama
+    if (fileToUpload) {
+        data.uploading = true;
+        delete data.rontgen_base64;
+        delete data.rontgen_filename;
+    }
+
+    // SIMPAN DATA UTAMA DULU (NON-BLOCKING)
+    finalizeSaveAssessment(data);
+
+    // Jalankan upload di background jika ada file
+    if (fileToUpload) {
+        processBackgroundUpload(data.id, fileToUpload, fileName, patientName);
     }
 }
 
@@ -2012,16 +2037,16 @@ function finalizeSaveAssessment(data) {
     const existingIdx = state.assessments.findIndex(a => a.id === data.id);
     if (existingIdx === -1) {
         state.assessments.push(data);
-        alert('Data Assessment Berhasil Disimpan!');
+        showToast('Asesmen baru berhasil disimpan local.', 'success');
     } else {
         state.assessments[existingIdx] = data;
-        alert('Perubahan Data Assessment Berhasil Disimpan!');
+        showToast('Update asesmen berhasil disimpan local.', 'success');
     }
 
     data.updatedAt = new Date().toISOString();
     saveData();
     if (state.scriptUrl) syncDelta();
-    if (state.scriptUrl) pushDataToSheet();
+    // if (state.scriptUrl) pushDataToSheet(); // SyncDelta sudah cukup untuk efisiensi
     navigate('assessments');
 }
 
