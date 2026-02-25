@@ -209,7 +209,7 @@
     <script>
         // === CONFIG ===
         // URL GAS Script (Same as main app)
-        const GAS_API_URL = typeof LICENSE_API_URL !== 'undefined' ? LICENSE_API_URL : '';
+        const API_URL = typeof LICENSE_API_URL !== 'undefined' ? LICENSE_API_URL : '';
 
         // === STATE ===
         let clinicConfig = null; // { clinic_name, sheet_id, available_hours: [] }
@@ -236,14 +236,14 @@
                 return;
             }
 
-            if (!GAS_API_URL) {
+            if (!API_URL) {
                 showError('Konfigurasi server (LICENSE_API_URL) belum diatur.');
                 return;
             }
 
             // Fetch clinic info
             try {
-                const resp = await fetch(`${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&t=${Date.now()}`);
+                const resp = await fetch(`${API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&t=${Date.now()}`);
                 const result = await resp.json();
 
                 if (result.status === 'success') {
@@ -292,7 +292,7 @@
             document.getElementById('inp-time').value = '';
 
             try {
-                const url = `${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&date=${date}&t=${Date.now()}`;
+                const url = `${API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&date=${date}&t=${Date.now()}`;
                 const resp = await fetch(url);
                 const result = await resp.json();
 
@@ -355,7 +355,7 @@
             };
 
             try {
-                await fetch(GAS_API_URL, {
+                await fetch(API_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
