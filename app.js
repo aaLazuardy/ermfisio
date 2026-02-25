@@ -1605,6 +1605,8 @@ function renderAssessmentForm(container, useTempData = false) {
             b: [], s: [], d_act: [], d_part: [], intervention: [], eval: [],
             obj: { rom: 'Normal', mmt: '5', balance: 'Baik' },
             plan: '',
+            is_consented: false,
+            consent_timestamp: '',
             rontgen_url: ''
         };
         if (!Array.isArray(data.pain_points)) data.pain_points = [];
@@ -1798,7 +1800,26 @@ function renderAssessmentForm(container, useTempData = false) {
                                      ${data.rontgen_url ? `<a href="${data.rontgen_url}" target="_blank" class="flex flex-col items-center gap-2 group"><i data-lucide="file-text" width="48" class="text-blue-500"></i><span class="text-xs font-bold text-blue-600 group-hover:underline">Lihat Dokumen Exist</span></a>` : `<p class="text-xs text-slate-400 italic">Belum ada file diupload</p>`}
                                 </div>
                             </div>
-                        </div>
+                        <!-- Section Informed Consent Digital (v2.4) -->
+                        ${state.pdfConfig.showInformedConsent ? `
+                        <div class="bg-blue-50 p-6 md:p-8 rounded-2xl border-2 border-blue-100 shadow-sm mt-6 fade-in">
+                            <div class="flex items-start gap-4">
+                                <div class="shrink-0 mt-1">
+                                    <input type="checkbox" id="form-is-consented" ${data.is_consented ? 'checked' : ''} 
+                                        onchange="updateForm('is_consented', this.checked); if(this.checked) updateForm('consent_timestamp', new Date().toLocaleString('id-ID'));" 
+                                        class="w-6 h-6 accent-blue-600 rounded cursor-pointer">
+                                </div>
+                                <div class="flex-1">
+                                    <label for="form-is-consented" class="font-bold text-slate-800 cursor-pointer select-none">
+                                        Persetujuan Tindakan (Informed Consent)
+                                    </label>
+                                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        Saya telah menjelaskan prosedur, risiko, dan manfaat tindakan fisioterapi kepada pasien/wali, dan mereka <strong>MENYETUJUI</strong> tindakan tersebut secara sadar.
+                                    </p>
+                                    ${data.consent_timestamp ? `<p class="text-[10px] text-blue-600 font-bold mt-2 flex items-center gap-1"><i data-lucide="clock" width="10"></i> Disetujui pada: ${data.consent_timestamp}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>` : ''}
 
                         </div>
 
@@ -3755,19 +3776,29 @@ function generateSingleAssessmentHTML(a, p) {
         </div>
 
         ${conf.showInformedConsent ? `
-        <div class="mt-10 mb-6 p-4 border border-slate-200 rounded-xl bg-slate-50/50 break-inside-avoid">
+        <div class="mt-10 mb-6 p-4 border border-slate-200 rounded-xl bg-slate-50/50 break-inside-avoid relative overflow-hidden">
+            ${a.is_consented ? `
+            <div class="absolute -right-6 top-4 rotate-12 bg-blue-600 text-white px-10 py-1 text-[8px] font-black uppercase tracking-widest shadow-sm">
+                Verified Digital
+            </div>` : ''}
             <h4 class="font-bold text-[0.8em] text-slate-500 uppercase mb-2">Persetujuan Pasien (Informed Consent)</h4>
             <p class="text-[0.85em] leading-relaxed text-justify text-slate-700 italic">
                 "${conf.informedConsentText || '-'}"
             </p>
             <div class="mt-4 flex justify-between items-end">
                 <div class="text-[0.7em] text-slate-400">
-                    Dokumen ini sah dan disetujui secara digital oleh pasien/wali pasien pada saat pemeriksaan.
+                    ${a.is_consented ? `
+                    <div class="flex items-center gap-1.5 text-blue-700 font-bold">
+                        <span class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></span>
+                        DISETUJUI SECARA DIGITAL oleh ${p ? p.name : 'Pasien'} pada ${a.consent_timestamp || '-'}
+                    </div>` : 'Dokumen ini sah dan disetujui secara digital oleh pasien/wali pasien pada saat pemeriksaan.'}
                 </div>
-                <div class="w-32 border-b border-slate-300 h-8"></div>
+                <div class="w-32 border-b border-slate-300 h-8 flex items-center justify-center">
+                    ${a.is_consented ? `<span class="text-[10px] font-black text-blue-600 font-mono tracking-tighter opacity-30 select-none uppercase">Digital Signed</span>` : ''}
+                </div>
             </div>
             <div class="flex justify-end pr-4 mt-1">
-                <span class="text-[0.65em] text-slate-400 font-bold uppercase">Tanda Tangan/Paraf Pasien</span>
+                <span class="text-[0.65em] text-slate-400 font-bold uppercase">${a.is_consented ? 'Konfirmasi Digital Sah' : 'Tanda Tangan/Paraf Pasien'}</span>
             </div>
         </div>` : ''}
 
