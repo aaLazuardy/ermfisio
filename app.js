@@ -1947,18 +1947,7 @@ function saveAssessment() {
     const existingIdx = state.assessments.findIndex(a => a.id === data.id);
     if (existingIdx === -1) {
         state.assessments.push(data);
-        const pIdx = state.patients.findIndex(p => p.id === data.patientId);
-        if (pIdx > -1) {
-            let patient = state.patients[pIdx];
-            if (patient.quota && patient.quota > 0) {
-                patient.quota = patient.quota - 1;
-                state.patients[pIdx] = patient;
-                alert(`Data Tersimpan! Sisa paket pasien: ${patient.quota} sesi.`);
-                if (patient.quota === 0) setTimeout(() => alert("PERINGATAN: Paket pasien ini SUDAH HABIS hari ini. Silakan tawarkan perpanjangan paket."), 500);
-            } else {
-                alert('Data Assessment Berhasil Disimpan!');
-            }
-        }
+        alert('Data Assessment Berhasil Disimpan!');
     } else {
         state.assessments[existingIdx] = data;
         alert('Perubahan Data Assessment Berhasil Disimpan!');
@@ -2096,6 +2085,8 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
                         <input type="hidden" name="patientId" id="patient-id-value" value="${appt.patientId}" required>
                         <div id="patient-search-results" class="hidden absolute top-full left-0 w-full bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-60 overflow-y-auto z-50 divide-y divide-slate-100"></div>
                     </div>
+                    <!-- Panduan Klinis (Dinamis) -->
+                    <div id="clinical-guidance-box" class="hidden"></div>
                     <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
                         <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Tipe Layanan Pasien</label>
                         <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -2201,6 +2192,50 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
     document.addEventListener('click', function (e) {
         if (!searchInput.contains(e.target) && !resultBox.contains(e.target)) resultBox.classList.add('hidden');
     });
+
+    // If pre-filled (edit mode), render guidance
+    if (appt.patientId) renderClinicalGuidance(appt.patientId);
+}
+
+function renderClinicalGuidance(patientId) {
+    const box = document.getElementById('clinical-guidance-box');
+    if (!box) return;
+
+    // Get latest assessment
+    const lastAss = [...(state.assessments || [])]
+        .filter(a => a.patientId === patientId)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    if (!lastAss) {
+        box.classList.add('hidden');
+        return;
+    }
+
+    box.innerHTML = `
+        <div class="bg-blue-50/50 border border-blue-100 rounded-xl p-4 mt-2 fade-in">
+            <div class="flex items-center gap-2 mb-3 border-b border-blue-100 pb-2">
+                <i data-lucide="info" width="16" class="text-blue-600"></i>
+                <span class="text-xs font-black text-blue-800 uppercase tracking-wider">Panduan Klinis Asesmen Terakhir</span>
+            </div>
+            <div class="space-y-3">
+                ${lastAss.eval && lastAss.eval.length > 0 ? `
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Hasil Evaluasi:</label>
+                    <div class="text-[11px] text-slate-700 bg-white/50 p-2 rounded-lg border border-blue-50 leading-relaxed italic">
+                        ${lastAss.eval.map(e => `• ${e}`).join('<br>')}
+                    </div>
+                </div>` : ''}
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Rencana Selanjutnya:</label>
+                    <div class="inline-block px-3 py-1 bg-blue-600 text-white text-[11px] font-bold rounded-full shadow-sm">
+                        ${lastAss.plan || 'Belum diisi'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    box.classList.remove('hidden');
+    lucide.createIcons();
 }
 
 window.selectPatientSearch = function (id, name, fee) {
@@ -2209,6 +2244,7 @@ window.selectPatientSearch = function (id, name, fee) {
     document.getElementById('appt-fee').value = fee;
     document.getElementById('patient-search-results').classList.add('hidden');
     document.getElementById('clear-search').classList.remove('hidden');
+    renderClinicalGuidance(id);
 };
 
 function applyPackageToAppointment(packageId) {
@@ -2258,6 +2294,22 @@ function saveAppointment() {
     const packetCount = parseInt(form.querySelector('[name="packetCount"]')?.value || '1');
 
     if (!patientId || !date || !time) { alert("Data wajib diisi!"); return; }
+
+    // Conflict Detection
+    const isConflict = state.appointments.some(a =>
+        a.id !== id &&
+        a.date === date &&
+        a.time === time &&
+        a.therapistId === therapistId
+    );
+
+    if (isConflict) {
+        const therapistName = state.users.find(u => u.username === therapistId)?.name || therapistId;
+        if (!confirm(`Warning: Terapis ${therapistName} sudah memiliki jadwal lain di jam ${time} tanggal ${date}. Tetap simpan?`)) {
+            return;
+        }
+    }
+
     const updates = { patientId, time, therapistId, notes, fee, patientType, updatedAt: new Date().toISOString() };
 
     if (id) {
@@ -2410,8 +2462,7 @@ function openPatientModal(id = null) {
                             ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
                         </select>
                     </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-[10px] text-purple-700 block mb-1">Sisa Sesi (Kuota)</label><input type="number" name="quota" value="${p.quota || 0}" min="0" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-700"></div>
+                    <div class="grid grid-cols-1">
                         <div><label class="text-[10px] text-purple-700 block mb-1">Tarif Per Datang (Rp)</label><input type="number" name="defaultFee" value="${p.defaultFee || 0}" step="5000" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-700"></div>
                     </div>
                 </div>
@@ -2466,7 +2517,7 @@ function submitPatientForm() {
         job: form.querySelector('[name="job"]').value,
         address: form.querySelector('[name="address"]').value,
         diagnosis: form.querySelector('[name="diagnosis"]').value,
-        quota: parseInt(form.querySelector('[name="quota"]').value) || 0,
+        quota: (state.patients.find(pt => pt.id === (form.querySelector('[name="id"]').value))?.quota) || 0,
         defaultFee: parseInt(form.querySelector('[name="defaultFee"]').value) || 0,
         updatedAt: new Date().toISOString()
     };
@@ -2872,7 +2923,7 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_QRIS', value: state.clinicInfo.qrisImage }
             ];
 
-            await fetch(GAS_API_URL, {
+            await fetch(LICENSE_API_URL, {
                 method: 'POST', mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' }, // Avoid preflight
                 body: JSON.stringify({
@@ -2996,10 +3047,10 @@ async function saveBookingConfig() {
     const originalText = btn ? btn.innerHTML : 'Simpan & Generate Link';
 
     const alias = (document.getElementById('conf-booking-alias') || {}).value.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!alias) { alert('Isi Alias Klinik terlebih dahulu!'); return; }
+    if (!alias) { alert('⚠️ Isi Alias Klinik terlebih dahulu!'); return; }
 
     const hours = [...document.querySelectorAll('.booking-hour-check:checked')].map(el => el.value);
-    if (hours.length === 0) { alert('Pilih minimal 1 jam tersedia!'); return; }
+    if (hours.length === 0) { alert('⚠️ Pilih minimal 1 jam tersedia!'); return; }
 
     // Update State
     state.bookingConfig.alias = alias;
@@ -3009,20 +3060,27 @@ async function saveBookingConfig() {
     updateBookingLinkPreview();
     await saveData();
 
-    if (state.scriptUrl) {
+    // Pastikan kita punya URL Script untuk sinkronisasi
+    if (state.scriptUrl || localStorage.getItem('erm_script_url')) {
         if (btn) {
-            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" width="16"></i><span>Menyimpan ke Cloud...</span>';
+            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" width="16"></i><span>Menghubungkan ke Cloud...</span>';
             btn.disabled = true;
             lucide.createIcons();
         }
 
         try {
-            const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
-            if (!sheetId) throw new Error("Sheet ID tidak ditemukan.");
+            const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl || localStorage.getItem('erm_script_url'));
 
+            if (!sheetId) {
+                alert('⚠️ Sheet ID tidak ditemukan!\nSilahkan isi URL Spreadsheet di tab "Data & User" terlebih dahulu.');
+                return;
+            }
+
+            // CRITICAL: Gunakan LICENSE_API_URL (App Script), bukan state.scriptUrl (Sheet)
             await fetch(LICENSE_API_URL, {
-                method: 'POST', mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain' }, // Avoid preflight
+                method: 'POST',
+                mode: 'no-cors', // Tetap pakai no-cors karena GAS limits, tapi kita sudah validasi ID di awal
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
                     action: 'save_booking_config',
                     sheet_id: sheetId,
@@ -3031,10 +3089,10 @@ async function saveBookingConfig() {
                 })
             });
 
-            alert('✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nLink booking Anda siap digunakan.');
+            alert('✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nData jam tersedia sudah terkirim ke Master Sheet.\nLink booking Anda siap digunakan.');
         } catch (e) {
-            console.warn('Sync failed:', e);
-            alert('Tersimpan Lokal (Gagal sinkron ke Cloud).');
+            console.error('Sync failed:', e);
+            alert('❌ Gagal sinkron ke Cloud.\nTersimpan Lokal saja. Cek koneksi internet Anda.');
         } finally {
             if (btn) {
                 btn.innerHTML = originalText;
@@ -3043,7 +3101,7 @@ async function saveBookingConfig() {
             }
         }
     } else {
-        alert('✅ Tersimpan Secara Lokal!\n(Sync Cloud dilewati karena Script URL belum diisi)');
+        alert('ℹ️ Tersimpan Secara Lokal!\n\nUntuk sinkronisasi ke Booking Page (Cloud), Anda harus mengisi URL Spreadsheet di tab "Data & User" terlebih dahulu.');
     }
 }
 
@@ -4764,6 +4822,11 @@ function openPaymentModal(apptId) {
         <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1">
             <!-- Rincian -->
             <div class="bg-slate-50 rounded-xl p-4 space-y-2">
+                ${p && p.quota > 0 ? `
+                <div class="flex justify-between items-center bg-blue-100/50 p-2 rounded-lg mb-2">
+                    <div class="flex items-center gap-2"><i data-lucide="package" width="14" class="text-blue-600"></i><span class="text-xs font-bold text-blue-800">SISA PAKET TERSEDIA</span></div>
+                    <span class="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] font-black">${p.quota} SESI</span>
+                </div>` : ''}
                 <div class="flex justify-between text-sm"><span class="text-slate-500">Biaya Fisioterapi</span><span class="font-bold">${formatRp(feeBase)}</span></div>
                 <div class="flex justify-between text-sm items-center">
                     <span class="text-slate-500">Diskon (Rp)</span>
@@ -4780,11 +4843,11 @@ function openPaymentModal(apptId) {
             <!-- Pilih Metode -->
             <div>
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
-                <div class="grid grid-cols-2 xs:grid-cols-4 gap-2" id="pm-method-group">
-                    ${['Tunai', 'Transfer', 'QRIS', 'BPJS'].map(m => `
-                    <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
+                <div class="grid grid-cols-2 xs:grid-cols-5 gap-2" id="pm-method-group">
+                    ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'QRIS', 'BPJS'] : ['Tunai', 'Transfer', 'QRIS', 'BPJS']).map(m => `
+                    <button type="button" onclick="selectPaymentMethod('${m}', ${feeBase})" id="pm-${m}"
                         class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
-                        <div class="text-xl mb-1">${m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
+                        <div class="text-xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
                         <div class="text-[10px] uppercase">${m}</div>
                     </button>`).join('')}
                 </div>
@@ -4840,8 +4903,17 @@ function openPaymentModal(apptId) {
     renderIcons();
 }
 
-function selectPaymentMethod(method) {
+function selectPaymentMethod(method, feeBase) {
     state._selectedPaymentMethod = method;
+
+    // Auto discount for 'Paket'
+    if (method === 'Paket') {
+        const discInput = document.getElementById('pm-discount');
+        if (discInput) {
+            discInput.value = feeBase;
+            handlePaymentUpdate(feeBase);
+        }
+    }
     // Update button styles
     ['Tunai', 'Transfer', 'QRIS', 'BPJS'].forEach(m => {
         const btn = document.getElementById(`pm-${m}`);
@@ -4890,6 +4962,17 @@ async function confirmPayment(apptId) {
     a.finalAmount = finalAmount;
     a.paidAt = new Date().toISOString();
     a.updatedAt = new Date().toISOString();
+
+    // Auto Deduct Quota
+    const pIdx = state.patients.findIndex(p => p.id === a.patientId);
+    if (pIdx > -1) {
+        let patient = state.patients[pIdx];
+        if (patient.quota && patient.quota > 0) {
+            patient.quota = patient.quota - 1;
+            console.log(`Quota deducted for ${patient.name}. Remaining: ${patient.quota}`);
+            // If quota becomes 0, we might want to alert, but since it's in a modal, maybe just console log or show in the success message
+        }
+    }
 
     saveData();
     if (state.scriptUrl) syncDelta();
