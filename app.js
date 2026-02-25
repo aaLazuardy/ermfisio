@@ -1769,7 +1769,36 @@ function renderAssessmentForm(container, useTempData = false) {
                             </div>
                         </div>
 
+                        <!-- Section Rontgen (Penyempurnaan v2.1) -->
+                        <div class="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm mt-6">
+                            <div class="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+                                <div class="bg-amber-600 text-white p-2 rounded-lg shadow-amber-200 shadow-md">
+                                    <i data-lucide="image" width="20"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-lg text-slate-800">Penunjang Medis (Rontgen/MRI)</h3>
+                                    <p class="text-xs text-slate-400">Upload foto atau scan hasil pemeriksaan</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-col md:flex-row gap-6 items-start">
+                                <div class="w-full md:w-1/2">
+                                    <label class="relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <i data-lucide="upload-cloud" class="text-slate-400 group-hover:text-blue-500 mb-2 transition-colors"></i>
+                                            <p class="mb-2 text-sm text-slate-500"><span class="font-bold">Klik untuk upload</span></p>
+                                            <p class="text-[10px] text-slate-400">PNG, JPG, atau PDF (Max 10MB)</p>
+                                        </div>
+                                        <input type="file" class="hidden" accept="image/*,.pdf" onchange="handleRontgenUpload(this)">
+                                    </label>
+                                </div>
+                                <div id="rontgen-preview-box" class="w-full md:w-1/2 min-h-[160px] bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-center relative overflow-hidden">
+                                     ${data.rontgen_url ? `<a href="${data.rontgen_url}" target="_blank" class="flex flex-col items-center gap-2 group"><i data-lucide="file-text" width="48" class="text-blue-500"></i><span class="text-xs font-bold text-blue-600 group-hover:underline">Lihat Dokumen Exist</span></a>` : `<p class="text-xs text-slate-400 italic">Belum ada file diupload</p>`}
+                                </div>
+                            </div>
                         </div>
+
+                        </div>
+
                         
                         <div class="p-4 bg-white border-t border-slate-200 flex flex-col-reverse md:flex-row justify-between items-center gap-3 shadow-sm rounded-2xl border border-slate-200">
                             <button type="button" onclick="navigate('assessments')" class="w-full md:w-auto px-6 py-3 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-colors text-sm border border-slate-200 md:border-transparent">Batal</button>
