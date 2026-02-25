@@ -24,6 +24,7 @@ let state = {
     patientLimit: 50,
     assessmentLimit: 50,
     scriptUrl: '',
+    sheetId: '',
     filterPatientId: null,
     laporanLimit: 50,
     laporanSearch: '',
@@ -152,10 +153,10 @@ function formatDateForDisplay(dateStr) {
 // --- 3. DATA & INIT ---
 async function loadData() {
     try {
-        // 1. Inisialisasi Database
-        await window.fisiotaDB.init();
-
         // 2. Ambil data dari IndexedDB
+        state.scriptUrl = localStorage.getItem('erm_script_url') || '';
+        state.sheetId = localStorage.getItem('erm_sheet_id') || getSheetIdFromUrl(state.scriptUrl) || '';
+
         let [patients, assessments, appointments, expenses, users, configs, packages] = await Promise.all([
             window.fisiotaDB.getAll('patients'),
             window.fisiotaDB.getAll('assessments'),
@@ -343,9 +344,11 @@ async function checkLicense() {
                 // AUTO-CONFIG: If server returns sheet_id, auto-connect!
                 if (result.sheet_id) {
                     const autoUrl = `https://docs.google.com/spreadsheets/d/${result.sheet_id}/edit`;
-                    if (autoUrl !== state.scriptUrl) {
+                    if (autoUrl !== state.scriptUrl || result.sheet_id !== state.sheetId) {
                         localStorage.setItem('erm_script_url', autoUrl);
+                        localStorage.setItem('erm_sheet_id', result.sheet_id);
                         state.scriptUrl = autoUrl;
+                        state.sheetId = result.sheet_id;
                         console.log("AUTO-CONFIG: Database Connected via License");
                     }
                 }
@@ -675,8 +678,8 @@ function getSheetIdFromUrl(url) {
 async function pushDataToSheet() {
     if (!state.scriptUrl) { alert("URL Google Sheet belum dikonfigurasi!"); return; }
 
-    const sheetId = getSheetIdFromUrl(state.scriptUrl);
-    if (!sheetId) { alert("Format URL Google Sheet tidak valid!"); return; }
+    const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+    if (!sheetId) { alert("Sheet ID tidak valid! Harap cek di menu Konfigurasi System."); return; }
 
     if (!confirm("PERHATIAN: Mode SYNC TOTAL aktif.\nData di Google Sheet akan disamakan PERSIS dengan Aplikasi ini.\nJika Anda menghapus data di Aplikasi, di Sheet juga akan terhapus.\n\nLanjutkan?")) return;
 
@@ -2795,7 +2798,11 @@ function renderConfigView(container) {
                     <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
                         <h3 class="font-bold text-lg text-slate-800 mb-2">Integrasi Cloud Storage</h3>
                         <p class="text-xs text-slate-500 mb-2">Masukkan URL Spreadsheet Google milik Klinik.</p>
-                        <input type="text" id="script-url" value="${state.scriptUrl}" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full border p-2 rounded text-xs font-mono bg-slate-50 mb-1">
+                        <input type="text" id="script-url" value="${state.scriptUrl}" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full border p-2 rounded text-xs font-mono bg-slate-50 mb-3">
+                        
+                        <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Google Sheet ID (Otomatis/Manual)</label>
+                        <input type="text" id="conf-sheet-id" value="${state.sheetId}" placeholder="1abc123..." class="w-full border p-2 rounded text-xs font-mono bg-white mb-1">
+                        
                         <p class="text-[10px] text-slate-400 mb-3 italic">*Pastikan Sheet di-SHARE (Editor) ke Email Script Server:<br><strong class="text-blue-600">contactlazuardy@gmail.com</strong></p>
                         <button onclick="saveConfig()" class="bg-slate-800 text-white w-full py-2 rounded text-sm font-bold mb-4">Simpan & Koneksikan</button>
                         <div class="flex gap-2">
@@ -2844,7 +2851,9 @@ async function saveClinicConfig() {
             btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" width="16"></i> Menyinkronkan...`;
             lucide.createIcons();
 
-            const sheetId = getSheetIdFromUrl(state.scriptUrl);
+            const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+            if (!sheetId) throw new Error("Sheet ID tidak valid.");
+
             const configItems = [
                 { key: 'CLINIC_NAME', value: state.clinicInfo.name },
                 { key: 'CLINIC_SUBNAME', value: state.clinicInfo.subname },
@@ -3000,7 +3009,9 @@ async function saveBookingConfig() {
         }
 
         try {
-            const sheetId = getSheetIdFromUrl(state.scriptUrl);
+            const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+            if (!sheetId) throw new Error("Sheet ID tidak ditemukan.");
+
             await fetch(LICENSE_API_URL, {
                 method: 'POST', mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
@@ -3106,8 +3117,15 @@ function switchConfigTab(tabName) {
 
 function saveConfig() {
     state.scriptUrl = document.getElementById('script-url').value.trim();
+    state.sheetId = document.getElementById('conf-sheet-id').value.trim() || getSheetIdFromUrl(state.scriptUrl);
+
     localStorage.setItem('erm_script_url', state.scriptUrl);
-    alert('Tersimpan!');
+    localStorage.setItem('erm_sheet_id', state.sheetId);
+
+    alert('Konfigurasi Cloud Tersimpan!');
+    if (document.getElementById('conf-sheet-id')) {
+        document.getElementById('conf-sheet-id').value = state.sheetId;
+    }
     checkOnlineStatus();
 }
 
