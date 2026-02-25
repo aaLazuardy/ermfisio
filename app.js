@@ -56,6 +56,10 @@ let state = {
         msgReject: '',
         msgReminder: ''
     },
+    bookingConfig: {
+        alias: '',
+        availableHours: ''
+    },
     deletedIds: {
         patients: [],
         assessments: [],
@@ -188,6 +192,7 @@ async function loadData() {
                 state.clinicInfo = globalCfg.info || state.clinicInfo;
                 state.pdfConfig = { ...state.pdfConfig, ...(globalCfg.pdf || {}) };
                 state.notificationConfig = { ...state.notificationConfig, ...(globalCfg.notif || {}) };
+                state.bookingConfig = { ...state.bookingConfig, ...(globalCfg.booking || {}) };
             }
 
             const deleteLog = configs.find(c => c.id === 'deleted_logs');
@@ -233,6 +238,12 @@ async function loadData() {
                 state.scriptUrl = localStorage.getItem('erm_script_url') || '';
             }
         } catch (e) { state.scriptUrl = ''; }
+
+        // Migration/Fallback for Booking Config
+        if (!state.bookingConfig.alias) {
+            state.bookingConfig.alias = localStorage.getItem('erm_booking_alias') || '';
+            state.bookingConfig.availableHours = localStorage.getItem('erm_booking_hours') || '';
+        }
 
         // Apply Legacy Configs if IndexedDB didn't have them yet
         const savedConfig = JSON.parse(localStorage.getItem('erm_clinic_config'));
@@ -491,7 +502,7 @@ async function saveData() {
             window.fisiotaDB.save('packages', state.packages || []),
             window.fisiotaDB.save('users', state.users),
             window.fisiotaDB.save('config', [
-                { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig },
+                { id: 'global', info: state.clinicInfo, pdf: state.pdfConfig, notif: state.notificationConfig, booking: state.bookingConfig },
                 { id: 'deleted_logs', ids: state.deletedIds }
             ])
         ]);
@@ -1737,8 +1748,8 @@ function renderAssessmentForm(container, useTempData = false) {
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div>
                                     <h4 class="text-xs font-bold mb-3 text-slate-500 uppercase">Hasil Evaluasi</h4>
-                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 min-h-[160px]" id="group-eval">
-                                        ${data.eval.length > 0 ? data.eval.map(item => `<div class="flex items-center gap-2 p-3 rounded-lg bg-white border border-slate-200 text-sm text-slate-700 shadow-sm mb-2"><i data-lucide="check-circle" width="16" class="text-emerald-500"></i> <span class="flex-1">${item}</span><button type="button" onclick="toggleFormItem('eval', '${item}')" class="text-slate-300 hover:text-red-500 transition-colors"><i data-lucide="x" width="16"></i></button></div>`).join('') : '<div class="h-full flex items-center justify-center text-sm text-slate-400 italic">Belum ada catatan evaluasi</div>'}
+                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 min-h-[160px] space-y-2" id="group-eval">
+                                        ${renderListItems('eval')}
                                     </div>
                                     <div class="flex gap-2 mt-3">
                                         <input type="text" id="custom-eval" placeholder="Ketik hasil evaluasi..." class="flex-1 text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:border-blue-500 outline-none" onkeydown="if(event.key === 'Enter') addCustomItem('eval')">
@@ -1844,8 +1855,32 @@ function renderTextAreaWithMenu(key, currentValue, title) {
 }
 
 function renderCheckboxGroup(key, currentItems) {
-    if (!currentItems || currentItems.length === 0) return '<p class="text-xs text-slate-400 italic">Belum ada item dipilih</p>';
-    return `<div class="grid grid-cols-1 gap-2" id="group-${key}">${currentItems.map(item => `<label class="flex items-center gap-2 p-2.5 rounded-lg cursor-pointer text-sm border select-none bg-blue-50 text-blue-700 border-blue-100 transition-colors hover:bg-blue-100"><input type="checkbox" checked onchange="toggleFormItem('${key}', '${item}')" class="accent-blue-600 w-4 h-4 rounded"><span class="leading-none">${item}</span></label>`).join('')}</div>`;
+    return `<div class="grid grid-cols-1 gap-2" id="group-${key}">${renderListItems(key)}</div>`;
+}
+
+function renderListItems(category) {
+    const list = window.tempFormData[category] || [];
+    if (list.length === 0) {
+        return `<div class="h-full flex items-center justify-center text-sm text-slate-400 italic p-4">Belum ada ${category === 'eval' ? 'catatan evaluasi' : 'item dipilih'}</div>`;
+    }
+
+    if (category === 'eval') {
+        return list.map(item => `
+            <div class="flex items-center gap-2 p-3 rounded-lg bg-white border border-slate-200 text-sm text-slate-700 shadow-sm">
+                <i data-lucide="check-circle" width="16" class="text-emerald-500"></i> 
+                <span class="flex-1">${item}</span>
+                <button type="button" onclick="toggleFormItem('eval', '${item}')" class="text-slate-300 hover:text-red-500 transition-colors">
+                    <i data-lucide="x" width="16"></i>
+                </button>
+            </div>`).join('');
+    }
+
+    // Default for checkboxes (Intervention)
+    return list.map(item => `
+        <label class="flex items-center gap-2 p-2.5 rounded-lg cursor-pointer text-sm border select-none bg-blue-50 text-blue-700 border-blue-100 transition-colors hover:bg-blue-100">
+            <input type="checkbox" checked onchange="toggleFormItem('${category}', '${item}')" class="accent-blue-600 w-4 h-4 rounded">
+            <span class="leading-none">${item}</span>
+        </label>`).join('');
 }
 
 function renderSelect(label, objKey, val, options) {
@@ -1861,8 +1896,17 @@ function toggleFormItem(category, item) {
     if (index > -1) list.splice(index, 1);
     else list.push(item);
 
-    // Update UI immediately (especially for eval list) with scroll preservation
-    renderAssessmentForm(document.getElementById('main-content'), true);
+    updateGroupUI(category);
+}
+
+function updateGroupUI(category) {
+    const container = document.getElementById(`group-${category}`);
+    if (container) {
+        container.innerHTML = renderListItems(category);
+        lucide.createIcons();
+    } else {
+        renderAssessmentForm(document.getElementById('main-content'), true);
+    }
 }
 
 function addCustomItem(category) {
@@ -1870,7 +1914,8 @@ function addCustomItem(category) {
     const val = input.value.trim();
     if (val) {
         window.tempFormData[category].push(val);
-        renderAssessmentForm(document.getElementById('main-content'), true);
+        input.value = ''; // Clear input
+        updateGroupUI(category);
     }
 }
 
@@ -2066,7 +2111,33 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Tarif (Rp)</label><input type="number" name="fee" id="appt-fee" value="${appt.fee || 0}" step="5000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 bg-orange-50 border-orange-200"></div>
                     </div>
                     <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Catatan</label><textarea name="notes" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-20" placeholder="Contoh: Bawa bola, Cek tensi...">${appt.notes || ''}</textarea></div>
-                    ${!apptId ? `<div class="bg-blue-50 p-4 rounded-xl border border-blue-200"><label class="text-xs font-bold text-blue-800 uppercase block mb-2">Opsi Paket Terapi</label><div class="grid grid-cols-2 gap-3 mb-3"><div><label class="text-[10px] text-blue-600 block mb-1">Frekuensi</label><select name="frequency" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white" onchange="togglePacketCount(this.value)"><option value="once" ${defaultFreq === 'once' ? 'selected' : ''}>Sekali Datang</option><option value="1x" ${defaultFreq === '1x' ? 'selected' : ''}>1x Seminggu (+7 hari)</option><option value="2x" ${defaultFreq === '2x' ? 'selected' : ''}>2x Seminggu (+3/4 hari)</option><option value="3x" ${defaultFreq === '3x' ? 'selected' : ''}>3x Seminggu (+2 hari)</option></select></div><div id="packet-count-box" class="${defaultFreq === 'once' ? 'hidden' : ''}"><label class="text-[10px] text-blue-600 block mb-1">Total Sesi</label><input type="number" name="packetCount" value="${defaultCount}" min="2" max="24" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"></div></div><p class="text-[10px] text-blue-500 italic">*Jadwal otomatis dibuat sesuai pola frekuensi.</p></div>` : ''}
+                    ${!apptId ? `
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                        <label class="text-xs font-bold text-blue-800 uppercase block mb-2">Opsi Layanan & Paket</label>
+                        <div class="mb-3">
+                            <label class="text-[10px] text-blue-600 block mb-1">Pilih Paket (Auto-Fill)</label>
+                            <select onchange="applyPackageToAppointment(this.value)" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium">
+                                <option value="">-- Custom / Tanpa Paket --</option>
+                                ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="text-[10px] text-blue-600 block mb-1">Frekuensi</label>
+                                <select name="frequency" id="appt-frequency" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white" onchange="togglePacketCount(this.value)">
+                                    <option value="once" ${defaultFreq === 'once' ? 'selected' : ''}>Sekali Datang</option>
+                                    <option value="1x" ${defaultFreq === '1x' ? 'selected' : ''}>1x Seminggu (+7 hari)</option>
+                                    <option value="2x" ${defaultFreq === '2x' ? 'selected' : ''}>2x Seminggu (+3/4 hari)</option>
+                                    <option value="3x" ${defaultFreq === '3x' ? 'selected' : ''}>3x Seminggu (+2 hari)</option>
+                                </select>
+                            </div>
+                            <div id="packet-count-box" class="${defaultFreq === 'once' ? 'hidden' : ''}">
+                                <label class="text-[10px] text-blue-600 block mb-1">Total Sesi</label>
+                                <input type="number" name="packetCount" id="appt-packet-count" value="${defaultCount}" min="2" max="24" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-blue-500 italic">*Jadwal otomatis dibuat sesuai pola frekuensi.</p>
+                    </div>` : ''}
                     ${apptId && appt.groupId ? `<div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex items-start gap-2"><i data-lucide="layers" width="16" class="text-yellow-600 mt-0.5"></i><div><p class="text-xs font-bold text-yellow-800">Bagian dari Paket Terapi</p><p class="text-[10px] text-yellow-700">Jadwal ini terhubung dengan sesi lainnya.</p></div></div>` : ''}
                 </div>
             </form>
@@ -2132,6 +2203,32 @@ window.selectPatientSearch = function (id, name, fee) {
     document.getElementById('patient-search-results').classList.add('hidden');
     document.getElementById('clear-search').classList.remove('hidden');
 };
+
+function applyPackageToAppointment(packageId) {
+    const pkg = state.packages.find(p => p.id === packageId);
+    if (!pkg) return;
+
+    const feeInput = document.getElementById('appt-fee');
+    const freqSelect = document.getElementById('appt-frequency');
+    const countInput = document.getElementById('appt-packet-count');
+    const countBox = document.getElementById('packet-count-box');
+
+    if (feeInput) feeInput.value = Math.round(pkg.price / pkg.sessions);
+    if (countInput) countInput.value = pkg.sessions;
+
+    if (freqSelect) {
+        // Default to 2x for packages > 1 sessions
+        if (pkg.sessions > 1) {
+            if (freqSelect.value === 'once') {
+                freqSelect.value = '2x';
+                if (countBox) countBox.classList.remove('hidden');
+            }
+        } else {
+            freqSelect.value = 'once';
+            if (countBox) countBox.classList.add('hidden');
+        }
+    }
+}
 
 function togglePacketCount(val) {
     const box = document.getElementById('packet-count-box');
@@ -2456,7 +2553,7 @@ function renderConfigView(container) {
                                 <span class="bg-slate-100 text-slate-500 px-3 py-2.5 rounded-l-lg border border-r-0 text-xs font-mono font-bold border-slate-200">booking/?id=</span>
                                 <input type="text" id="conf-booking-alias" placeholder="nama-klinik-anda"
                                     oninput="updateBookingLinkPreview()"
-                                    value="${localStorage.getItem('erm_booking_alias') || ''}"
+                                    value="${state.bookingConfig.alias || ''}"
                                     class="flex-1 border border-slate-200 p-2.5 rounded-r-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-mono">
                             </div>
                             <p class="text-[11px] text-slate-400 mt-1">Huruf kecil, tanpa spasi, gunakan tanda hubung (-). Contoh: <i>klinik-sehat-blitar</i></p>
@@ -2466,7 +2563,7 @@ function renderConfigView(container) {
                             <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Jam Tersedia</label>
                             <div class="grid grid-cols-3 gap-2">
                                 ${['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(h => {
-        const saved = localStorage.getItem('erm_booking_hours') || '08:00,09:00,10:00,11:00,13:00,14:00,15:00,16:00';
+        const saved = state.bookingConfig.availableHours || '08:00,09:00,10:00,11:00,13:00,14:00,15:00,16:00';
         const checked = saved.split(',').includes(h) ? 'checked' : '';
         return `<label class="flex items-center gap-1.5 text-sm cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg">
                                         <input type="checkbox" value="${h}" ${checked} onchange="updateBookingLinkPreview()" class="booking-hour-check w-4 h-4 accent-emerald-500">
@@ -2850,63 +2947,84 @@ const _bookingBase = (typeof BOOKING_BASE_URL !== 'undefined' && BOOKING_BASE_UR
     : (window.location.origin + '/Booking');
 
 function updateBookingLinkPreview() {
-    const alias = (document.getElementById('conf-booking-alias') || {}).value || '';
+    const aliasInput = document.getElementById('conf-booking-alias');
+    const alias = aliasInput ? aliasInput.value.trim() : state.bookingConfig.alias;
     const display = document.getElementById('booking-link-display');
     if (!display) return;
-    if (alias.trim()) {
-        const link = `${_bookingBase}/?id=${alias.trim()}`;
-        display.innerHTML = `<a href="${link}" target="_blank" class="text-blue-600 hover:underline break-all">${link}</a>`;
+    if (alias) {
+        const link = `${_bookingBase}/?id=${alias}`;
+        display.innerHTML = `<a href="${link}" target="_blank" class="text-blue-600 hover:underline break-all font-mono text-[11px]">${link}</a>`;
     } else {
-        display.innerHTML = '<span class="italic">Isi Alias dan klik Simpan...</span>';
+        display.innerHTML = '<span class="italic text-slate-400">Isi Alias dan klik Simpan...</span>';
     }
 }
 
 function copyBookingLink() {
-    const alias = localStorage.getItem('erm_booking_alias');
-    if (!alias) { alert('Simpan config booking dulu!'); return; }
+    const alias = state.bookingConfig.alias;
+    if (!alias) { alert('Simpan konfigurasi booking terlebih dahulu!'); return; }
     const link = `${_bookingBase}/?id=${alias}`;
     navigator.clipboard.writeText(link).then(() => {
         const btn = document.getElementById('btn-copy-link');
-        if (btn) { btn.innerHTML = '<i data-lucide="check" width="14"></i> Tersalin!'; lucide.createIcons(); setTimeout(() => { btn.innerHTML = '<i data-lucide="copy" width="14"></i> Salin Link'; lucide.createIcons(); }, 2000); }
-    }).catch(() => { alert('Gagal menyalin. Salin manual:\n' + link); });
+        if (btn) {
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="check" width="14"></i><span>Tersalin!</span>';
+            lucide.createIcons();
+            setTimeout(() => { btn.innerHTML = originalHtml; lucide.createIcons(); }, 2000);
+        }
+    }).catch(() => { alert('Gagal menyalin. Silakan salin manual:\n' + link); });
 }
 
 async function saveBookingConfig() {
+    const btn = document.querySelector('button[onclick="saveBookingConfig()"]');
+    const originalText = btn ? btn.innerHTML : 'Simpan & Generate Link';
+
     const alias = (document.getElementById('conf-booking-alias') || {}).value.trim().toLowerCase().replace(/\s+/g, '-');
     if (!alias) { alert('Isi Alias Klinik terlebih dahulu!'); return; }
 
     const hours = [...document.querySelectorAll('.booking-hour-check:checked')].map(el => el.value);
     if (hours.length === 0) { alert('Pilih minimal 1 jam tersedia!'); return; }
 
-    // Save locally
-    localStorage.setItem('erm_booking_alias', alias);
-    localStorage.setItem('erm_booking_hours', hours.join(','));
+    // Update State
+    state.bookingConfig.alias = alias;
+    state.bookingConfig.availableHours = hours.join(',');
 
-    // Update alias display
-    const aliasInput = document.getElementById('conf-booking-alias');
-    if (aliasInput) aliasInput.value = alias;
+    // Sync UI
     updateBookingLinkPreview();
+    await saveData();
 
-    // Push to GAS so it syncs to the Licenses sheet
-    const sheetId = getSheetIdFromUrl(state.scriptUrl);
-    if (sheetId && state.scriptUrl) {
+    if (state.scriptUrl) {
+        if (btn) {
+            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" width="16"></i><span>Menyimpan ke Cloud...</span>';
+            btn.disabled = true;
+            lucide.createIcons();
+        }
+
         try {
+            const sheetId = getSheetIdFromUrl(state.scriptUrl);
             await fetch(LICENSE_API_URL, {
-                method: 'POST',
-                mode: 'no-cors',
+                method: 'POST', mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'save_booking_config',
                     sheet_id: sheetId,
                     alias: alias,
-                    available_hours: hours.join(',')
+                    available_hours: state.bookingConfig.availableHours
                 })
             });
-        } catch (e) { console.warn('Could not save booking config to server:', e); }
+            alert(`✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nLink booking Anda siap digunakan.`);
+        } catch (e) {
+            console.warn('Sync failed:', e);
+            alert('Tersimpan Lokal (Gagal sinkron ke Cloud).');
+        } finally {
+            if (btn) {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                lucide.createIcons();
+            }
+        }
+    } else {
+        alert('✅ Tersimpan Secara Lokal!\n(Sync Cloud dilewati karena Script URL belum diisi)');
     }
-
-    alert(`✅ Konfigurasi Booking Disimpan!\n\nAlias: ${alias}\nJam: ${hours.join(', ')}\n\nLink booking sudah siap disalin.`);
-    renderIcons();
 }
 
 async function saveNotificationConfig() {
@@ -3191,8 +3309,7 @@ function saveHEPLog() {
     const hepNote = `HEP Dikirim (${selectedExercises.length} latihan)`;
     if (!window.tempFormData.intervention.includes(hepNote)) {
         window.tempFormData.intervention.push(hepNote);
-        renderAssessmentForm(document.getElementById('main-content'), true);
-        setTimeout(showStep2, 50);
+        updateGroupUI('intervention');
     }
 }
 
