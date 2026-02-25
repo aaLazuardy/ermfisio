@@ -1027,7 +1027,7 @@ function renderDashboard(container) {
     const todayIncome = (state.appointments || [])
         .filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-            const isLegacyPaid = !a.paymentStatus && Number(a.fee) > 0;
+            const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
             return (isPaid || isLegacyPaid) && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today;
         })
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
@@ -1976,6 +1976,7 @@ function saveAssessment() {
     );
     if (apptIdx > -1) {
         state.appointments[apptIdx].fee = data.fee;
+        state.appointments[apptIdx].updatedAt = new Date().toISOString();
         console.log(`Synced fee ${data.fee} to appointment ${state.appointments[apptIdx].id}`);
     }
 
@@ -4148,13 +4149,13 @@ function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
     const antrian = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
         return a.date === today && (a.status === 'CONFIRMED' || !a.status) && !isPaid && !isLegacyPaid;
     }).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
     const lunas = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
         return a.date === today && (isPaid || isLegacyPaid);
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
@@ -4431,7 +4432,7 @@ function renderKasirLaporan(formatRp) {
 
     const filtered = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
         const apptDate = (a.paidAt || a.date || '');
         const dateMatch = apptDate && apptDate.slice(0, 10) >= savedFrom && apptDate.slice(0, 10) <= savedTo;
         return (isPaid || isLegacyPaid) && dateMatch;
@@ -4939,7 +4940,7 @@ function renderKasirPajak(formatRp) {
 
     const filtered = (state.appointments || []).filter(a => {
         const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && parseRp(a.fee) > 0;
+        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
         const d = (a.paidAt || a.date || '').slice(0, 10);
         return (isPaid || isLegacyPaid) && d >= periodStart && d <= periodEnd;
     });
@@ -5094,7 +5095,7 @@ function printJournalReport(mode = 'GENERAL') {
 
         filtered = (state.appointments || []).filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && parseRp(a.fee) > 0;
+            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && (a.paymentMethod || a.paidAt);
             const apptDate = (a.paidAt || a.date || '');
             const dateStr = apptDate.slice(0, 10);
             return (isPaid || isLegacyPaid) && dateStr >= pStart && dateStr <= pEnd;
@@ -5112,8 +5113,8 @@ function printJournalReport(mode = 'GENERAL') {
 
         filtered = (state.appointments || []).filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-            // Legacy check: Jika paymentStatus belum ada, anggap PAID jika FEE > 0
-            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && parseRp(a.fee) > 0;
+            // Legacy check: Jika paymentStatus belum ada, anggap PAID jika sudah ada Metode Bayar / Tanggal Bayar
+            const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && (a.paymentMethod || a.paidAt);
 
             const apptDate = (a.paidAt || a.date || '');
             const dateStr = apptDate.slice(0, 10);
