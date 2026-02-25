@@ -61,13 +61,17 @@ function doGet(e) {
 
     // ACTION: CHECK LICENSE (GET Method - CORS Friendly)
     if (action === "check_license") {
+        const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+        checkAndFixColumns(ssMaster, true); // Pastikan tab License di Master OK
         const key = e.parameter.key;
-        const result = verifyLicense(ss, key, TARGET_SHEET_ID); // Pass TARGET_SHEET_ID
+        const result = verifyLicense(key, TARGET_SHEET_ID); 
         return createJSONOutput(result);
     }
 
     // ACTION: GET CLINIC INFO BY ALIAS (For Booking Page)
     if (action === "get_clinic_info") {
+        const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+        checkAndFixColumns(ssMaster, true);
         const alias = e.parameter.alias;
         const selectedDate = e.parameter.date; // Parameter baru untuk filter jam
         if (!alias) return createJSONOutput({ status: 'error', message: 'Alias kosong' });
@@ -147,8 +151,9 @@ function doGet(e) {
         }
     }
 
+    // ACTION: PULL DATA
     if (action === "pull") {
-        checkAndFixColumns(ss); // Auto-repair schema on pull
+        checkAndFixColumns(ss, false); // Client structure
         return createJSONOutput({
             patients: getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
             assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
@@ -161,7 +166,7 @@ function doGet(e) {
 
     // ACTION: AUTO-UPDATE COLUMNS (Triggered manually or via easy link)
     if (action === "update_database") {
-        const logs = checkAndFixColumns(ss);
+        const logs = checkAndFixColumns(ss, false);
         checkAndFixPackagesSheet(ss);
         return createJSONOutput({ status: "success", message: "Database Structure Updated", logs: logs });
     }
@@ -202,7 +207,7 @@ function updateAllConnectedClients() {
         
         try {
             const clientSS = SpreadsheetApp.openById(sheetId);
-            const logs = checkAndFixColumns(clientSS);
+            const logs = checkAndFixColumns(clientSS, false);
             
             if (logs.some(l => l.includes("Added columns"))) {
                 summary.push(`✅ ${clientName}: Updated`);
@@ -216,7 +221,7 @@ function updateAllConnectedClients() {
     });
 
     // 3. Update juga Master Sheet (tempat script ini berada)
-    checkAndFixColumns(ss);
+    checkAndFixColumns(ss, true);
     summary.push(`🤖 Master Admin: Checked`);
 
     ui.alert(`Update Selesai (${successCount}/${clients.length})`, summary.join("\n"), ui.ButtonSet.OK);
@@ -243,20 +248,22 @@ function doPost(e) {
 
             // === ACTION: CHECK LICENSE ===
             if (data.action === 'check_license') {
-                const result = verifyLicense(ss, data.key, TARGET_SHEET_ID); // Pass TARGET_SHEET_ID
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+                checkAndFixColumns(ssMaster, true);
+                const result = verifyLicense(data.key, TARGET_SHEET_ID);
                 return createJSONOutput(result);
             }
 
             // ACTION: SAVE CONFIG
             if (data.action === 'save_config') {
-                checkAndFixColumns(ss);
+                checkAndFixColumns(ss, false);
                 if (data.config) updateConfigSheet(ss, data.config);
                 return createJSONOutput({ status: "success" });
             }
 
             // ACTION: PUSH DATA (FULL OVERWRITE)
             if (data.action === "push") {
-                checkAndFixColumns(ss); // Auto-repair schema on push
+                checkAndFixColumns(ss, false);
                 if (data.patients) saveDataFixed(ss, SHEET_NAMES.PATIENTS, data.patients, HEADERS.PATIENTS);
                 if (data.assessments) saveDataFixed(ss, SHEET_NAMES.ASSESSMENTS, data.assessments, HEADERS.ASSESSMENTS);
                 if (data.appointments) saveDataFixed(ss, SHEET_NAMES.APPOINTMENTS, data.appointments, HEADERS.APPOINTMENTS);
@@ -268,7 +275,7 @@ function doPost(e) {
 
             // ACTION: SMART SYNC (INCREMENTAL)
             if (data.action === "sync_incremental" || data.action === "delta_push") {
-                checkAndFixColumns(ss); // Auto-repair schema on incremental sync
+                checkAndFixColumns(ss, false); // Auto-repair schema on incremental sync
                 processIncrementalSync(ss, data);
                 return createJSONOutput({ status: "success", message: "Sync Completed" });
             }
@@ -346,11 +353,10 @@ function doPost(e) {
                 return handlePublicBooking(e, data);
             }
 
-            // ACTION: SAVE BOOKING CONFIG (Alias + Available Hours) to Licenses sheet
+            // ACTION: SAVE BOOKING CONFIG (MASTER REGISTRY)
             if (data.action === 'save_booking_config') {
-                const ssMaster = SpreadsheetApp.getActiveSpreadsheet(); 
-                checkAndFixColumns(ssMaster); // Ensure headers exist
-                
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+                checkAndFixColumns(ssMaster, true);
                 const licSheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
                 if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
                 const rows = licSheet.getDataRange().getValues();

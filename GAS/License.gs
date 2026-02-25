@@ -66,10 +66,11 @@ function generateNewLicense(clientName, durationType) {
     };
 }
 
-function verifyLicense(ssIgnored, keyInput, clientSheetId) { 
+function verifyLicense(keyInput, clientSheetId) { 
     Logger.log(`[verifyLicense] Key: ${keyInput} | SheetID Received: ${clientSheetId || 'NULL'}`);
     const ss = SpreadsheetApp.getActiveSpreadsheet(); 
-    const sheet = getOrInsertSheet(ss, SHEET_NAMES.LICENSES, HEADERS.LICENSES);
+    const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+    if (!sheet) return { valid: false, message: "Tab Licenses tidak ditemukan di Master." };
     const data = sheet.getDataRange().getValues();
 
     let found = null;

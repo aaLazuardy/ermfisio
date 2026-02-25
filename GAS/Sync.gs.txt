@@ -177,8 +177,8 @@ function deleteRowsById(sheet, ids) {
 function createJSONOutput(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
 // --- AUTO-UPDATE COLUMNS FEATURE ---
-function checkAndFixColumns(ss) {
-    const sheetsToCheck = [
+function checkAndFixColumns(ss, isMaster = false) {
+    const allSheets = [
         { name: SHEET_NAMES.PATIENTS, headers: HEADERS.PATIENTS },
         { name: SHEET_NAMES.ASSESSMENTS, headers: HEADERS.ASSESSMENTS },
         { name: SHEET_NAMES.APPOINTMENTS, headers: HEADERS.APPOINTMENTS },
@@ -187,6 +187,12 @@ function checkAndFixColumns(ss) {
         { name: SHEET_NAMES.PACKAGES, headers: HEADERS.PACKAGES },
         { name: SHEET_NAMES.LICENSES, headers: HEADERS.LICENSES }
     ];
+
+    // Filter: Jika isMaster, hanya proses Licenses. Jika tidak, proses semua selain Licenses.
+    const sheetsToCheck = allSheets.filter(item => {
+        if (isMaster) return item.name === SHEET_NAMES.LICENSES;
+        return item.name !== SHEET_NAMES.LICENSES;
+    });
 
     let logs = [];
 
