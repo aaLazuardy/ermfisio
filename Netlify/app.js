@@ -1992,7 +1992,7 @@ function saveAssessment() {
             .then(res => {
                 if (res.status === 401) {
                     throw new Error("HTTP 401 (Unauthorized). Akses Ditolak!\n\n" +
-                        "Penyebab:\n1. Anda menggunakan URL /dev (Gunakan /exec)\n2. Pengaturan 'Who has access' belum diatur ke 'Anyone'");
+                        "Penyebab:\n1. URL yang terpasang berakhiran /dev (Gunakan /exec)\n2. Belum klik 'Deploy > New Version' setelah beri izin\n3. Akses belum diset ke 'Anyone'\n\nURL saat ini: ..." + cleanUrl.slice(-20));
                 }
                 if (!res.ok) throw new Error("Server response not OK (HTTP " + res.status + ")");
                 return res.json();
@@ -2009,7 +2009,7 @@ function saveAssessment() {
             })
             .catch(err => {
                 console.error("Upload error detail:", err);
-                alert("Error upload: " + err.message + "\n\nPastikan:\n1. URL Script sudah benar\n2. Script sudah di-Deploy sebagai 'Web App'\n3. Akses diset ke 'Anyone'");
+                alert("Error upload: " + err.message + "\n\nMohon Cek:\n1. Menu Konfigurasi (Pastikan URL berakhiran /exec)\n2. Deploy ulang GAS sebagai 'New Version'");
             });
     } else {
         finalizeSaveAssessment(data);
