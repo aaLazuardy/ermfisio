@@ -1959,18 +1959,24 @@ function saveAssessment() {
             return;
         }
 
+        const cleanUrl = state.scriptUrl.trim();
+        const activeSheetId = state.sheetId || getSheetIdFromUrl(cleanUrl);
+
+        console.log("Attempting upload to:", cleanUrl.substring(0, 40) + "...");
+        console.log("Using sheetId:", activeSheetId);
+
         showToast("Sedang mengunggah berkas penunjang...", "info");
         const payload = {
             action: 'upload_file',
             fileData: data.rontgen_base64,
             fileName: data.rontgen_filename,
             patientName: (state.patients.find(p => p.id === data.patientId)?.name || 'Unknown'),
-            sheet_id: state.licenseKey
+            sheet_id: activeSheetId
         };
 
         // Menggunakan text/plain agar dianggap sebagai 'Simple Request' oleh browser
         // Ini menghindari CORS preflight (OPTIONS) yang sering gagal pada Google Apps Script
-        fetch(state.scriptUrl, {
+        fetch(cleanUrl, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
