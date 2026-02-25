@@ -1954,6 +1954,11 @@ function saveAssessment() {
 
     // Jika ada file rontgen yang belum diupload (masih base64)
     if (data.rontgen_base64) {
+        if (!state.scriptUrl) {
+            alert("Gagal: URL Google Script belum dikonfigurasi di menu Pengaturan.");
+            return;
+        }
+
         showToast("Sedang mengunggah berkas penunjang...", "info");
         const payload = {
             action: 'upload_file',
@@ -1963,11 +1968,18 @@ function saveAssessment() {
             sheet_id: state.licenseKey
         };
 
+        // Menggunakan text/plain agar dianggap sebagai 'Simple Request' oleh browser
+        // Ini menghindari CORS preflight (OPTIONS) yang sering gagal pada Google Apps Script
         fetch(state.scriptUrl, {
             method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("Server response not OK (HTTP " + res.status + ")");
+                return res.json();
+            })
             .then(res => {
                 if (res.status === 'success') {
                     data.rontgen_url = res.fileUrl;
@@ -1978,7 +1990,10 @@ function saveAssessment() {
                     alert("Gagal upload file: " + res.message);
                 }
             })
-            .catch(err => alert("Error upload: " + err));
+            .catch(err => {
+                console.error("Upload error detail:", err);
+                alert("Error upload: " + err.message + "\n\nPastikan:\n1. URL Script sudah benar\n2. Script sudah di-Deploy sebagai 'Web App'\n3. Akses diset ke 'Anyone'");
+            });
     } else {
         finalizeSaveAssessment(data);
     }
