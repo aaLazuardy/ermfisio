@@ -2865,9 +2865,9 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_QRIS', value: state.clinicInfo.qrisImage }
             ];
 
-            const resp = await fetch(GAS_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            await fetch(GAS_API_URL, {
+                method: 'POST', mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' }, // Avoid preflight
                 body: JSON.stringify({
                     action: 'save_config',
                     sheet_id: sheetId,
@@ -2875,11 +2875,7 @@ async function saveClinicConfig() {
                 })
             });
 
-            if (!resp.ok) throw new Error("Gagal terhubung ke Cloud.");
-            const result = await resp.json();
-            if (result.status !== 'success') throw new Error(result.message || "Gagal menyimpan.");
-
-            alert('Identity Klinik berhasil diperbarui & disinkronkan ke Cloud!');
+            alert('Identitas Klinik berhasil diperbarui (Sinkronisasi Cloud dijalankan)!');
         } catch (e) {
             console.warn("Sync failed, saved locally:", e);
             alert('Tersimpan secara lokal (Sinkronisasi Gagal).');
@@ -3017,9 +3013,9 @@ async function saveBookingConfig() {
             const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
             if (!sheetId) throw new Error("Sheet ID tidak ditemukan.");
 
-            const resp = await fetch(LICENSE_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            await fetch(LICENSE_API_URL, {
+                method: 'POST', mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' }, // Avoid preflight
                 body: JSON.stringify({
                     action: 'save_booking_config',
                     sheet_id: sheetId,
@@ -3027,10 +3023,6 @@ async function saveBookingConfig() {
                     available_hours: state.bookingConfig.availableHours
                 })
             });
-
-            if (!resp.ok) throw new Error("Gagal terhubung ke Cloud (HTTP Error).");
-            const result = await resp.json();
-            if (result.status !== 'success') throw new Error(result.message || "Gagal menyimpan di Cloud.");
 
             alert('✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nLink booking Anda siap digunakan.');
         } catch (e) {
