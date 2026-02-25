@@ -31,6 +31,24 @@ const HEADERS = {
 
 // --- 2. MENU & SIDEBAR ---
 
+/**
+ * Helper: Normalize time string or Date to HH:mm format.
+ */
+function normalizeTime(val) {
+    if (!val) return "";
+    if (val instanceof Date) return Utilities.formatDate(val, TIMEZONE, "HH:mm");
+    let s = String(val).trim();
+    if (s.includes(":") || s.includes(".")) {
+        let parts = s.split(/[:\.]/);
+        let HH = parts[0].padStart(2, '0');
+        let mm = (parts[1] || "00").substring(0, 2).padStart(2, '0');
+        return `${HH}:${mm}`;
+    }
+    // Handle cases like "9" -> "09:00"
+    if (!isNaN(s) && s.length <= 2) return s.padStart(2, '0') + ":00";
+    return s;
+}
+
 function onOpen() {
     SpreadsheetApp.getUi()
         .createMenu('FISIOTA Admin')
@@ -73,24 +91,22 @@ function doGet(e) {
         const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
         checkAndFixColumns(ssMaster, true);
         const alias = e.parameter.alias;
-        const selectedDate = e.parameter.date; // Parameter baru untuk filter jam
+        const selectedDate = e.parameter.date; 
         if (!alias) return createJSONOutput({ status: 'error', message: 'Alias kosong' });
-        const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
-        if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
+        
+        const sheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
+        if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan di Master.' });
         
         const data = sheet.getDataRange().getValues();
         if (data.length < 2) return createJSONOutput({ status: 'error', message: 'Data lisensi kosong.' });
         
         // Dynamic header lookup with normalization
         const headers = data[0];
-        const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
-        const headersNormalized = headers.map(normalize);
-
-        const colAlias = headersNormalized.indexOf(normalize('alias'));
-        const colStatus = headersNormalized.indexOf(normalize('status'));
-        const colName = headersNormalized.indexOf(normalize('client_name')) !== -1 ? headersNormalized.indexOf(normalize('client_name')) : headersNormalized.indexOf(normalize('client name'));
-        const colSheetId = headersNormalized.indexOf(normalize('sheet_id')) !== -1 ? headersNormalized.indexOf(normalize('sheet_id')) : headersNormalized.indexOf(normalize('sheet id'));
-        const colHours = headersNormalized.indexOf(normalize('available_hours'));
+        const colAlias = findColumnIndex(headers, ['alias', 'alias_klinik']);
+        const colStatus = findColumnIndex(headers, ['status', 'status_lisensi']);
+        const colName = findColumnIndex(headers, ['client_name', 'client name', 'nama_klinik', 'nama_klien']);
+        const colSheetId = findColumnIndex(headers, ['sheet_id', 'sheet id', 'id_sheet']);
+        const colHours = findColumnIndex(headers, ['available_hours', 'jam_tersedia', 'jam tersedia']);
         
         if (colAlias === -1) return createJSONOutput({ status: 'error', message: 'Kolom Alias tidak ditemukan di tab Licenses.' });
         if (colStatus === -1) return createJSONOutput({ status: 'error', message: 'Kolom Status tidak ditemukan di tab Licenses.' });
@@ -99,7 +115,8 @@ function doGet(e) {
         if (row) {
             const defaultHours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
             let hoursRaw = colHours !== -1 ? String(row[colHours] || "").trim() : "";
-            let hours = hoursRaw ? hoursRaw.split(',').map(h => h.trim()).filter(h => h) : defaultHours;
+            // Handle multiple separators just in case
+            let hours = hoursRaw ? hoursRaw.split(/[,\s;]+/).map(h => normalizeTime(h)).filter(h => h) : defaultHours.map(h => normalizeTime(h));
             let sheetId = colSheetId !== -1 ? String(row[colSheetId] || "").trim() : '';
             
             // Robust ID extraction if stored as URL
@@ -109,45 +126,62 @@ function doGet(e) {
             }
 
             const clinicName = colName !== -1 && row[colName] ? row[colName] : (row[colAlias] || 'Klinik');
-            Logger.log(`[get_clinic_info] Found Clinic: ${clinicName} | SheetID: ${sheetId}`);
+            
+            // Debugging metrics
+            let debugInfo = { raw_hours_count: hours.length };
 
-            // LOGIKA FILTER SLOT TERISI
+            // LOGIKA FILTER SLOT TERISI (Normalisasi HH:mm)
             if (selectedDate && sheetId) {
                 try {
                     const clientSS = SpreadsheetApp.openById(sheetId);
                     const apptSheet = clientSS.getSheetByName(SHEET_NAMES.APPOINTMENTS);
                     if (apptSheet && apptSheet.getLastRow() > 1) {
-                        const apptRows = apptSheet.getDataRange().getValues();
-                        const bookedHours = [];
-                        for (let i = 1; i < apptRows.length; i++) {
-                            let rDate = apptRows[i][2]; // Kolom Date
-                            if (rDate instanceof Date) rDate = Utilities.formatDate(rDate, TIMEZONE, "yyyy-MM-dd");
-                            
-                            // NORMALIZE TIME (Handle both String and Date objects from Sheets)
-                            let rTimeRaw = apptRows[i][3];
-                            let rTime = "";
-                            if (rTimeRaw instanceof Date) {
-                                rTime = Utilities.formatDate(rTimeRaw, TIMEZONE, "HH:mm");
-                            } else {
-                                rTime = String(rTimeRaw).trim().substring(0, 5); // Keep "HH:mm"
+                        const apptRows = apptSheet.getDataRange().getDisplayValues(); 
+                        const apptHeaders = apptRows[0];
+                        const colDate = findColumnIndex(apptHeaders, ['date', 'tanggal']);
+                        const colTime = findColumnIndex(apptHeaders, ['time', 'jam', 'waktu']);
+                        const colAppStatus = findColumnIndex(apptHeaders, ['status']);
+
+                        // Normalize selectedDate for comparison (Support both yyyy-MM-dd and dd/MM/yyyy)
+                        const normalizeDateStr = (s) => {
+                            if (!s) return "";
+                            if (s.includes("-")) return s; // already yyyy-MM-dd
+                            if (s.includes("/")) {
+                                let parts = s.split("/");
+                                if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
                             }
-                            
-                            const rStatus = apptRows[i][8]; // Kolom Status
-                            if (rDate === selectedDate && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
-                                bookedHours.push(rTime);
+                            return s;
+                        };
+                        const targetDate = normalizeDateStr(selectedDate);
+
+                        const bookedHours = [];
+                        if (colDate !== -1 && colTime !== -1) {
+                            for (let i = 1; i < apptRows.length; i++) {
+                                let rDate = normalizeDateStr(apptRows[i][colDate]);
+                                let rTime = normalizeTime(apptRows[i][colTime]);
+                                let rStatus = colAppStatus !== -1 ? String(apptRows[i][colAppStatus] || "").toUpperCase().trim() : "";
+                                
+                                if (rDate === targetDate && rTime !== "" && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
+                                    bookedHours.push(rTime);
+                                }
                             }
                         }
+                        
+                        debugInfo.booked_count = bookedHours.length;
+                        debugInfo.booked_hours = bookedHours;
+
                         // Filter jam yang sudah terisi
-                        hours = hours.filter(h => !bookedHours.includes(h));
+                        hours = hours.filter(h => !bookedHours.includes(normalizeTime(h)));
                     }
-                } catch (e) { Logger.log("Filter booked hours error: " + e); }
+                } catch (e) { debugInfo.filter_error = e.toString(); }
             }
 
             return createJSONOutput({
                 status: 'success',
                 clinic_name: clinicName,
                 sheet_id: sheetId,
-                available_hours: hours
+                available_hours: hours,
+                debug: debugInfo
             });
         } else {
             return createJSONOutput({ status: 'error', message: 'Klinik tidak ditemukan atau lisensi tidak aktif.' });
@@ -238,24 +272,86 @@ function doPost(e) {
             try { data = JSON.parse(e.postData.contents); } catch (err) { return createJSONOutput({ status: "error", message: "Invalid JSON" }); }
 
             // --- BRIDGE LOGIC ---
-            // If sheet_id is provided in BODY or PARAM, use it.
-            // Note: e.parameter is from URL, data is from Body.
             if (e.parameter.sheet_id) TARGET_SHEET_ID = e.parameter.sheet_id;
             else if (data.sheet_id) TARGET_SHEET_ID = data.sheet_id;
 
-            Logger.log(`[doPost] Action: ${data.action} | SheetID Param: ${e.parameter.sheet_id} | SheetID Body: ${data.sheet_id} | FINAL TARGET: ${TARGET_SHEET_ID}`);
-            // --------------------
+            Logger.log(`[doPost] Action: ${data.action} | TargetSheet: ${TARGET_SHEET_ID}`);
 
-            const ss = getSpreadsheet();
-            Logger.log(`[doPost] Opened Spreadsheet ID: ${ss.getId()}`);
-
-            // === ACTION: CHECK LICENSE ===
+            // === 1. MASTER-ONLY ACTIONS (Works even if Client Sheet is not shared) ===
+            
+            // ACTION: CHECK LICENSE
             if (data.action === 'check_license') {
                 const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
                 checkAndFixColumns(ssMaster, true);
                 const result = verifyLicense(data.key, TARGET_SHEET_ID);
                 return createJSONOutput(result);
             }
+
+            // ACTION: SAVE BOOKING CONFIG (MASTER SHEET ONLY)
+            if (data.action === 'save_booking_config') {
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+                checkAndFixColumns(ssMaster, true);
+                const licSheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
+                if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
+                const rows = licSheet.getDataRange().getValues();
+                const headers = rows[0];
+                const colSheetId = findColumnIndex(headers, ['sheet_id', 'sheet id', 'id_sheet']);
+                const colAlias = findColumnIndex(headers, ['alias', 'alias_klinik']);
+                const colHours = findColumnIndex(headers, ['available_hours', 'jam_tersedia', 'jam tersedia']);
+                
+                if (colSheetId === -1 || colAlias === -1 || colHours === -1) {
+                   return createJSONOutput({ status: 'error', message: 'Kolom database Master tidak lengkap (Cek Sheet id/Alias/Hours).' });
+                }
+
+                let targetId = String(data.sheet_id || "").trim();
+                if (targetId.includes('/d/')) {
+                    const match = targetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                    if (match) targetId = match[1];
+                }
+                const targetAlias = String(data.alias || "").trim().toLowerCase();
+
+                let foundIndex = -1;
+                for (let i = 1; i < rows.length; i++) {
+                    let rowSheetId = String(rows[i][colSheetId] || "").trim();
+                    if (rowSheetId.includes('/d/')) {
+                        const match = rowSheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                        if (match) rowSheetId = match[1];
+                    }
+                    
+                    let rowAlias = String(rows[i][colAlias] || "").trim().toLowerCase();
+
+                    // Match logic: Priority 1: Sheet ID, Priority 2: Alias (Fallback)
+                    if ((targetId !== "" && rowSheetId === targetId) || (targetAlias !== "" && rowAlias === targetAlias)) {
+                        foundIndex = i;
+                        break;
+                    }
+                }
+
+                if (foundIndex !== -1) {
+                    Logger.log(`[save_booking_config] Match Found at Row ${foundIndex + 1}. Updating Alias: ${data.alias}, Hours: ${data.available_hours}`);
+                    if (data.alias) licSheet.getRange(foundIndex + 1, colAlias + 1).setValue(data.alias);
+                    licSheet.getRange(foundIndex + 1, colHours + 1).setValue(data.available_hours || '');
+                    return createJSONOutput({ status: 'success', message: 'Update berhasil di baris ' + (foundIndex + 1) });
+                }
+                
+                return createJSONOutput({ status: 'error', message: 'Sheet ID atau Alias tidak ditemukan di Master.', debug: 'Searched for ID: ' + targetId + ' | Alias: ' + targetAlias });
+            }
+
+            // ACTION: LOG RESET (OTP)
+            if (data.action === 'log_reset') {
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+                let logSheet = ssMaster.getSheetByName("Reset_Logs");
+                if (!logSheet) {
+                    logSheet = ssMaster.insertSheet("Reset_Logs");
+                    logSheet.appendRow(['Timestamp', 'Clinic Name', 'OTP Code', 'Device Info', 'Sheet ID']);
+                }
+                logSheet.appendRow([new Date(), data.clinic_name || "Unknown", "'" + (data.code || ""), data.deviceInfo || 'Unknown', TARGET_SHEET_ID]);
+                return createJSONOutput({ status: "success" });
+            }
+
+            // === 2. CLIENT-SHEET ACTIONS (Requires valid Client SS connection) ===
+            const ss = getSpreadsheet();
+            Logger.log(`[doPost] Opened Client Spreadsheet: ${ss.getId()}`);
 
             // ACTION: SAVE CONFIG
             if (data.action === 'save_config') {
@@ -264,7 +360,7 @@ function doPost(e) {
                 return createJSONOutput({ status: "success" });
             }
 
-            // ACTION: PUSH DATA (FULL OVERWRITE)
+            // ACTION: PUSH DATA
             if (data.action === "push") {
                 checkAndFixColumns(ss, false);
                 if (data.patients) saveDataFixed(ss, SHEET_NAMES.PATIENTS, data.patients, HEADERS.PATIENTS);
@@ -276,132 +372,43 @@ function doPost(e) {
                 return createJSONOutput({ status: "success" });
             }
 
-            // ACTION: SMART SYNC (INCREMENTAL)
+            // ACTION: SMART SYNC
             if (data.action === "sync_incremental" || data.action === "delta_push") {
-                checkAndFixColumns(ss, false); // Auto-repair schema on incremental sync
-                processIncrementalSync(ss, data);
-                return createJSONOutput({ status: "success", message: "Sync Completed" });
-            }
-
-            // ACTION: OTP (Reset Password) - LOG TO MASTER SHEET
-            if (data.action === 'log_reset') {
-                try {
-                    const ssAdmin = SpreadsheetApp.getActiveSpreadsheet();
-                    let logSheet = ssAdmin.getSheetByName("Reset_Logs");
-                    if (!logSheet) {
-                        logSheet = ssAdmin.insertSheet("Reset_Logs");
-                        logSheet.appendRow(['Timestamp', 'Clinic Name', 'OTP Code', 'Device Info', 'Sheet ID']);
-                        logSheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f3f3f3');
-                    }
-
-                    // Cari nama klinik berdasarkan sheet_id
-                    let clinicName = "Unknown/Guest";
-                    const licSheet = ssAdmin.getSheetByName(SHEET_NAMES.LICENSES);
-                    if (licSheet) {
-                        const rows = licSheet.getDataRange().getValues();
-                        const headers = rows[0].map(h => String(h).toLowerCase().trim());
-                        const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
-                        const colName = headers.indexOf('client_name');
-                        for (let i = 1; i < rows.length; i++) {
-                            if (String(rows[i][colSheetId]).trim() === String(TARGET_SHEET_ID).trim()) {
-                                clinicName = rows[i][colName];
-                                break;
-                            }
-                        }
-                    }
-
-                    logSheet.appendRow([
-                        new Date(),
-                        clinicName,
-                        "'" + data.code, // Force string with '
-                        data.deviceInfo || 'Unknown',
-                        TARGET_SHEET_ID
-                    ]);
-                    
-                    return createJSONOutput({ status: "success" });
-                } catch (e) {
-                    Logger.log("Error logging reset: " + e);
-                    return createJSONOutput({ status: "error", message: e.toString() });
+                checkAndFixColumns(ss, false);
+                if (data.deletedIds) {
+                    const d = data.deletedIds;
+                    Logger.log(`[Sync] Deleting Ids: Patients(${d.patients?.length||0}), Appts(${d.appointments?.length||0}), Assessments(${d.assessments?.length||0})`);
                 }
+                processIncrementalSync(ss, data);
+                return createJSONOutput({ status: "success" });
             }
 
-            // ACTION: SEND NOTIFICATION (Relay)
+            // ACTION: SEND NOTIFICATION
             if (data.action === 'send_notif') {
                 const config = getConfigMap(ss);
                 const results = { telegram: false, email: false };
-
-                // 1. TELEGRAM
                 if (data.type === 'telegram' || data.type === 'all') {
                     if (config.get('TELEGRAM_TOKEN') && config.get('TELEGRAM_CHAT_ID')) {
                         results.telegram = sendTelegram(config.get('TELEGRAM_TOKEN'), config.get('TELEGRAM_CHAT_ID'), data.message);
-                    } else {
-                        results.telegram_error = "Token/ChatID Missing";
                     }
                 }
-
-                // 2. EMAIL
                 if (data.type === 'email' || data.type === 'all') {
                     if (config.get('EMAIL_RECEIVER')) {
                         results.email = sendEmail(config.get('EMAIL_RECEIVER'), data.subject || "ERM Notification", data.message, config.get('EMAIL_SENDER'));
-                    } else {
-                        results.email_error = "Receiver Email Missing";
                     }
                 }
-
                 return createJSONOutput({ status: "success", details: results });
             }
 
-            // ACTION: PUBLIC BOOKING
-            if (data.action === 'book_appointment') {
-                return handlePublicBooking(e, data);
+            // ACTION: UPLOAD FILE TO DRIVE
+            if (data.action === 'upload_file') {
+                return uploadFileToDrive(data);
             }
 
-            // ACTION: SAVE BOOKING CONFIG (MASTER REGISTRY)
-            if (data.action === 'save_booking_config') {
-                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
-                checkAndFixColumns(ssMaster, true);
-                const licSheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
-                if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
-                const rows = licSheet.getDataRange().getValues();
-                const headers = rows[0];
-                const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
-                const headersNormalized = headers.map(normalize);
-                
-                const colSheetId = headersNormalized.indexOf(normalize('sheet_id'));
-                const colAlias = headersNormalized.indexOf(normalize('alias'));
-                const colHours = headersNormalized.indexOf(normalize('available_hours'));
-                
-                if (colSheetId === -1 || colAlias === -1 || colHours === -1) {
-                   return createJSONOutput({ status: 'error', message: 'Kolom database Master tidak lengkap.' });
-                }
-
-                for (let i = 1; i < rows.length; i++) {
-                    let rowSheetId = String(rows[i][colSheetId] || "").trim();
-                    // Handle if rowSheetId is a URL
-                    if (rowSheetId.includes('/d/')) {
-                        const match = rowSheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                        if (match) rowSheetId = match[1];
-                    }
-                    
-                    let targetId = String(data.sheet_id).trim();
-                    if (targetId.includes('/d/')) {
-                        const match = targetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                        if (match) targetId = match[1];
-                    }
-
-                    if (rowSheetId === targetId && targetId !== "") {
-                        licSheet.getRange(i + 1, colAlias + 1).setValue(data.alias || '');
-                        licSheet.getRange(i + 1, colHours + 1).setValue(data.available_hours || '');
-                        return createJSONOutput({ status: 'success' });
-                    }
-                }
-                return createJSONOutput({ status: 'error', message: 'Sheet ID tidak ditemukan di Master.' });
-            }
-
-            return createJSONOutput({ status: "error", message: "Unknown action" });
-
+            return createJSONOutput({ status: "error", message: "Unknown action: " + data.action });
 
         } catch (err) {
+            Logger.log("doPost Error: " + err);
             return createJSONOutput({ status: "error", message: err.toString() });
         } finally {
             lock.releaseLock();
@@ -409,6 +416,7 @@ function doPost(e) {
     }
     return createJSONOutput({ status: "error", message: "Server busy" });
 }
+
 
 // --- HTML SIDEBAR CONTENT ---
 function getSidebarHtml() {
@@ -520,4 +528,50 @@ function processPlaceholders(template, data) {
         result = result.replace(regex, data[key]);
     }
     return result;
+}
+
+/**
+ * Helper: Find column index by multiple possible names (normalized).
+ */
+function findColumnIndex(headers, targets) {
+    const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+    const normalizedHeaders = headers.map(normalize);
+    for (const target of targets) {
+        const idx = normalizedHeaders.indexOf(normalize(target));
+        if (idx !== -1) return idx;
+    }
+    return -1;
+}
+
+/**
+ * Upload Base64 file to Google Drive folder "Fisiota_Uploads"
+ */
+function uploadFileToDrive(data) {
+    try {
+        const folderName = "Fisiota_Uploads";
+        let folder;
+        const folders = DriveApp.getFoldersByName(folderName);
+        
+        if (folders.hasNext()) {
+            folder = folders.next();
+        } else {
+            folder = DriveApp.createFolder(folderName);
+        }
+
+        const fileName = `${data.patientName}_${Date.now()}_${data.fileName}`;
+        const contentType = data.fileData.substring(5, data.fileData.indexOf(';'));
+        const bytes = Utilities.base64Decode(data.fileData.split(',')[1]);
+        const blob = Utilities.newBlob(bytes, contentType, fileName);
+        
+        const file = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        
+        return createJSONOutput({
+            status: 'success',
+            fileUrl: file.getUrl(),
+            fileId: file.getId()
+        });
+    } catch (e) {
+        return createJSONOutput({ status: 'error', message: e.toString() });
+    }
 }

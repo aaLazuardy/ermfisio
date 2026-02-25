@@ -1601,7 +1601,8 @@ function renderAssessmentForm(container, useTempData = false) {
             fee: defFee, vas: 0, pain_points: [],
             b: [], s: [], d_act: [], d_part: [], intervention: [], eval: [],
             obj: { rom: 'Normal', mmt: '5', balance: 'Baik' },
-            plan: 'Lanjut 2x/minggu'
+            plan: '',
+            rontgen_url: ''
         };
         if (!Array.isArray(data.pain_points)) data.pain_points = [];
         window.tempFormData = JSON.parse(JSON.stringify(data));
@@ -1922,6 +1923,39 @@ function saveAssessment() {
     const data = window.tempFormData;
     if (!data.diagnosis) { alert("Mohon isi diagnosa medis."); return; }
 
+    // Jika ada file rontgen yang belum diupload (masih base64)
+    if (data.rontgen_base64) {
+        showToast("Sedang mengunggah berkas penunjang...", "info");
+        const payload = {
+            action: 'upload_file',
+            fileData: data.rontgen_base64,
+            fileName: data.rontgen_filename,
+            patientName: (state.patients.find(p => p.id === data.patientId)?.name || 'Unknown'),
+            sheet_id: state.licenseKey
+        };
+
+        fetch(state.scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    data.rontgen_url = res.fileUrl;
+                    delete data.rontgen_base64;
+                    delete data.rontgen_filename;
+                    finalizeSaveAssessment(data);
+                } else {
+                    alert("Gagal upload file: " + res.message);
+                }
+            })
+            .catch(err => alert("Error upload: " + err));
+    } else {
+        finalizeSaveAssessment(data);
+    }
+}
+
+function finalizeSaveAssessment(data) {
     const existingIdx = state.assessments.findIndex(a => a.id === data.id);
     if (existingIdx === -1) {
         state.assessments.push(data);
@@ -1931,15 +1965,41 @@ function saveAssessment() {
         alert('Perubahan Data Assessment Berhasil Disimpan!');
     }
 
-    // TIMESTAMP UPDATE
     data.updatedAt = new Date().toISOString();
-
     saveData();
     if (state.scriptUrl) syncDelta();
     if (state.scriptUrl) pushDataToSheet();
-
     navigate('assessments');
 }
+
+window.handleRontgenUpload = async (input) => {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+        alert("File terlalu besar (Maks 10MB)");
+        input.value = "";
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const base64 = e.target.result;
+        window.tempFormData.rontgen_base64 = base64;
+        window.tempFormData.rontgen_filename = file.name;
+
+        const preview = document.getElementById('rontgen-preview-box');
+        if (preview) {
+            if (file.type.startsWith('image/')) {
+                preview.innerHTML = `<img src="${base64}" class="w-full h-full object-cover">`;
+            } else {
+                preview.innerHTML = `<div class="flex flex-col items-center gap-2 py-4"><i data-lucide="file-text" width="48" class="text-blue-500"></i><span class="text-[10px] font-bold text-slate-600 text-center px-4">${file.name}</span></div>`;
+                lucide.createIcons();
+            }
+        }
+    };
+    reader.readAsDataURL(file);
+};
 
 function selectTemplateAndGo(tName) { applyTemplate(tName); showStep2(); }
 function goToFormManual() { window.tempFormData.diagnosis = ''; showStep2(); }
@@ -2041,6 +2101,39 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
                     </div>
                     <!-- Panduan Klinis (Dinamis) -->
                     <div id="clinical-guidance-box" class="hidden"></div>
+
+                    ${!apptId ? `
+                    <!-- Opsi Layanan \u0026 Paket (Otomasi Jadwal) -->
+                    <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i data-lucide="zap" width="14" class="text-blue-600"></i>
+                            <span class="text-[10px] font-black text-blue-800 uppercase tracking-wider">Otomasi Jadwal Paket</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Pilih Paket</label>
+                                <select id="appt-package" onchange="applyPackageToAppointment(this.value)" class="w-full text-xs border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold">
+                                    <option value="">-- Layanan Biasa --</option>
+                                    ${(state.packages || []).map(p => `<option value="${p.id}">${p.name} (${p.sessions} Sesi)</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Frekuensi</label>
+                                <select name="frequency" id="appt-frequency" onchange="togglePacketCount(this.value)" class="w-full text-xs border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold">
+                                    <option value="once" ${defaultFreq === 'once' ? 'selected' : ''}>Sekali Datang</option>
+                                    <option value="1x" ${defaultFreq === '1x' ? 'selected' : ''}>1x Seminggu</option>
+                                    <option value="2x" ${defaultFreq === '2x' ? 'selected' : ''}>2x Seminggu</option>
+                                    <option value="3x" ${defaultFreq === '3x' ? 'selected' : ''}>3x Seminggu</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="packet-count-box" class="${defaultFreq === 'once' ? 'hidden' : ''}">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Total Sesi yang Dibuat</label>
+                            <input type="number" id="appt-packet-count" value="${defaultCount}" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs font-bold bg-white">
+                        </div>
+                    </div>
+                    ` : ''}
+
                     <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
                         <label class="text-xs font-bold text-slate-500 uppercase block mb-2">Tipe Layanan Pasien</label>
                         <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -2167,10 +2260,36 @@ function renderClinicalGuidance(patientId) {
 window.selectPatientSearch = function (id, name, fee) {
     document.getElementById('patient-search-display').value = `${name} (${id})`;
     document.getElementById('patient-id-value').value = id;
-    document.getElementById('appt-fee').value = fee;
     document.getElementById('patient-search-results').classList.add('hidden');
     document.getElementById('clear-search').classList.remove('hidden');
     renderClinicalGuidance(id);
+};
+
+window.applyPackageToAppointment = (packageId) => {
+    const pkg = (state.packages || []).find(p => p.id === packageId);
+    if (!pkg) return;
+    const freqSelect = document.getElementById('appt-frequency');
+    const countInput = document.getElementById('appt-packet-count');
+    const countBox = document.getElementById('packet-count-box');
+    if (countInput) countInput.value = pkg.sessions;
+    if (freqSelect) {
+        if (pkg.sessions > 1) {
+            if (freqSelect.value === 'once') {
+                freqSelect.value = '2x';
+                if (countBox) countBox.classList.remove('hidden');
+            }
+        } else {
+            freqSelect.value = 'once';
+            if (countBox) countBox.classList.add('hidden');
+        }
+    }
+};
+
+window.togglePacketCount = (val) => {
+    const box = document.getElementById('packet-count-box');
+    if (box) {
+        if (val === 'once') box.classList.add('hidden'); else box.classList.remove('hidden');
+    }
 };
 
 function saveAppointment() {
@@ -2228,10 +2347,36 @@ function saveAppointment() {
             if (idx > -1) { state.appointments[idx] = { ...state.appointments[idx], ...updates, date }; finalizeSave(); }
         }
     } else {
-        const newId = `APT${Date.now()}`;
-        state.appointments.push({ id: newId, date, ...updates, groupId: null });
+        const freq = form.querySelector('[name="frequency"]')?.value || 'once';
+        if (freq !== 'once') {
+            const sessions = parseInt(document.getElementById('appt-packet-count')?.value) || 1;
+            const groupId = `GRP${Date.now()}`;
+            const series = generateSeries(date, sessions, freq);
+            series.forEach((d, i) => {
+                state.appointments.push({
+                    id: `APT${Date.now()}-${i}`,
+                    date: d,
+                    ...updates,
+                    groupId
+                });
+            });
+        } else {
+            const newId = `APT${Date.now()}`;
+            state.appointments.push({ id: newId, date, ...updates, groupId: null });
+        }
         finalizeSave();
     }
+}
+
+function generateSeries(startDate, count, freq) {
+    const dates = [];
+    const current = new Date(startDate);
+    const step = (freq === '1x') ? 7 : (freq === '2x') ? 3 : (freq === '3x') ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+        dates.push(new Date(current).toISOString().split('T')[0]);
+        current.setDate(current.getDate() + step);
+    }
+    return dates;
 }
 
 function confirmAppointment(id) {

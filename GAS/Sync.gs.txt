@@ -77,69 +77,48 @@ function updateConfigSheet(ss, configData) {
 
 
 function processIncrementalSync(ss, changes) {
-    const merge = (sheetName, headers, incomingItems) => {
+    const merge = (sheetName, headersArr, incomingItems) => {
         if (!incomingItems || incomingItems.length === 0) return;
 
-        const sheet = getOrInsertSheet(ss, sheetName, headers);
-        const dataRange = sheet.getDataRange();
-        const values = dataRange.getValues();
+        const sheet = getOrInsertSheet(ss, sheetName, headersArr);
+        const values = sheet.getDataRange().getValues();
+        const sheetHeaders = values[0];
+        
+        const norm = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
+        const sheetHeadersNorm = sheetHeaders.map(norm);
+        
+        const colIdIdx = findColumnIndex(sheetHeaders, ['id', 'patientId', 'key']);
+        const idIdx = colIdIdx !== -1 ? colIdIdx : 0;
 
-        // 1. If map is empty (only has headers or nothing), just append all
-        if (values.length <= 1) {
-            const newRows = incomingItems.map(item => headers.map(k => {
-                let v = item[k];
-                return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
-            }));
-            sheet.getRange(2, 1, newRows.length, headers.length).setNumberFormat("@").setValues(newRows);
-            return;
-        }
-
-        // 2. Map existing IDs to their row INDEX (in the 'values' array)
-        // headers are at index 0. Data starts at index 1.
         const idMap = new Map();
-        // values[i][0] is the ID column (Assuming 'id' is always first in headers)
         for (let i = 1; i < values.length; i++) {
-            idMap.set(String(values[i][0]), i);
+            idMap.set(String(values[i][idIdx]), i);
         }
 
-        const newRows = [];
-        let updatedCount = 0;
-
-        // 3. Process incoming items
         incomingItems.forEach(item => {
             const id = String(item.id);
-            const rowData = headers.map(k => {
-                let v = item[k];
-                return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
+            const rowData = sheetHeadersNorm.map((hNorm, idx) => {
+                const originalKey = headersArr.find(k => norm(k) === hNorm);
+                
+                if (originalKey && item[originalKey] !== undefined) {
+                    let v = item[originalKey];
+                    return (typeof v === 'object') ? JSON.stringify(v) : (v || "");
+                }
+                
+                if (idMap.has(id)) return values[idMap.get(id)][idx];
+                return "";
             });
 
             if (idMap.has(id)) {
-                // Update in-memory array
-                const rowIndex = idMap.get(id);
-                values[rowIndex] = rowData;
-                updatedCount++;
+                values[idMap.get(id)] = rowData;
             } else {
-                // Collect new rows
-                newRows.push(rowData);
+                values.push(rowData);
             }
         });
 
-        // 4. Batch Write Back
-        // Write updated existing rows (from values) + new rows
-        // We write the ENTIRE updated data set to ensure consistency
-        // (This is still faster than appendRow loop, and cheaper than cell-by-cell update)
-
-        let finalData = values.slice(1); // Remove header from existing data
-        if (newRows.length > 0) finalData = finalData.concat(newRows);
-
-        // Clear content and write fresh
+        const finalData = values.slice(1);
         if (finalData.length > 0) {
-            // Optimization: Limit range clearing to used area
-            // But safest is to clear old content first to avoid artifacts if total rows shrunk (unlikely in sync, but good practice)
-            // Actually, for INCREMENTAL sync, the total rows never shrink effectively (we don't handle deletions here yet, or 'rewriting' handles it).
-            // Since we are merging, the list only grows or stays same size (updates).
-
-            sheet.getRange(2, 1, finalData.length, headers.length).setNumberFormat("@").setValues(finalData);
+            sheet.getRange(2, 1, finalData.length, sheetHeaders.length).setNumberFormat("@").setValues(finalData);
         }
     };
 
@@ -164,11 +143,15 @@ function processIncrementalSync(ss, changes) {
 function deleteRowsById(sheet, ids) {
     if (!sheet || !ids || ids.length === 0) return;
     const data = sheet.getDataRange().getValues();
-    const rowsToDelete = [];
+    if (data.length < 1) return;
+
+    const headers = data[0];
+    const colId = findColumnIndex(headers, ['id', 'patientId', 'key']); 
+    const searchIdx = colId !== -1 ? colId : 0; 
 
     // Search from bottom to top to avoid index shifts
     for (let i = data.length - 1; i >= 1; i--) {
-        if (ids.indexOf(String(data[i][0])) !== -1) {
+        if (ids.indexOf(String(data[i][searchIdx])) !== -1) {
             sheet.deleteRow(i + 1);
         }
     }
