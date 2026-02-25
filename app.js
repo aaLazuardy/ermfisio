@@ -1762,34 +1762,12 @@ function renderAssessmentForm(container, useTempData = false) {
                                     </div>
                                 </div>
                                 <div>
-                                    <h4 class="text-xs font-bold mb-3 text-slate-500 uppercase">Rencana Selanjutnya</h4>
-                                    <div class="relative">
-                                        <select onchange="updateForm('plan', this.value)" class="w-full border-2 border-slate-200 p-5 rounded-xl bg-white outline-none text-base focus:border-blue-500 appearance-none font-bold text-slate-700 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">
-                                            <option ${data.plan === 'Lanjut 2x/minggu' ? 'selected' : ''}>Lanjut 2x/minggu</option>
-                                            <option ${data.plan === 'Lanjut 3x/minggu' ? 'selected' : ''}>Lanjut 3x/minggu</option>
-                                            <option ${data.plan === 'Lanjut 1x/minggu' ? 'selected' : ''}>Lanjut 1x/minggu</option>
-                                            <option ${data.plan === 'Evaluasi Ulang' ? 'selected' : ''}>Evaluasi Ulang</option>
-                                            <option ${data.plan === 'Selesai / Discharge' ? 'selected' : ''}>Selesai / Discharge</option>
-                                        </select>
-                                        <div class="absolute right-5 top-5 pointer-events-none text-slate-500"><i data-lucide="chevron-down" width="20"></i></div>
-                                    </div>
+                                    <h4 class="text-xs font-bold mb-3 text-slate-500 uppercase">Catatan Tambahan</h4>
+                                    <textarea id="form-plan" onchange="updateForm('plan', this.value)" class="w-full border-2 border-slate-200 p-4 rounded-xl h-40 focus:border-blue-500 outline-none resize-none text-base text-slate-700 bg-white" placeholder="Catatan atau instruksi tambahan (Opsional)...">${data.plan || ''}</textarea>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="bg-white p-6 md:p-8 rounded-2xl border-2 border-orange-100 shadow-sm mt-8">
-                            <div class="flex items-center gap-3 mb-4"><div class="bg-orange-500 text-white p-2 rounded-lg"><i data-lucide="banknote" width="20"></i></div><div><h3 class="font-bold text-lg text-slate-800">Kasir / Billing</h3><p class="text-xs text-slate-400">Input nominal (otomatis x1000)</p></div></div>
-                            <div class="bg-orange-50 p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center">
-                                <div class="flex-1 w-full">
-                                    <label class="text-xs font-bold text-orange-800 uppercase block mb-1">Nominal (Dalam Ribuan)</label>
-                                    <div class="relative">
-                                        <input type="text" inputmode="numeric" value="${data.fee ? data.fee / 1000 : ''}" placeholder="Contoh: 75" class="w-full border-2 border-orange-200 p-3 rounded-xl focus:border-orange-500 outline-none text-xl font-bold text-slate-700 pr-16" oninput="this.value = this.value.replace(/[^0-9]/g, ''); const val = (parseInt(this.value) || 0) * 1000; updateForm('fee', val); document.getElementById('fee-display').innerText = 'Rp ' + val.toLocaleString('id-ID');">
-                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xl pointer-events-none select-none">.000</span>
-                                    </div>
-                                </div>
-                                <div class="w-full md:w-auto text-right md:text-left"><p class="text-xs text-slate-500 mb-1">Total Biaya:</p><h2 id="fee-display" class="text-3xl font-black text-orange-600">Rp ${(data.fee || 0).toLocaleString('id-ID')}</h2></div>
-                            </div>
-                        </div>
                         </div>
                         
                         <div class="p-4 bg-white border-t border-slate-200 flex flex-col-reverse md:flex-row justify-between items-center gap-3 shadow-sm rounded-2xl border border-slate-200">
@@ -1956,34 +1934,10 @@ function saveAssessment() {
     // TIMESTAMP UPDATE
     data.updatedAt = new Date().toISOString();
 
-    // SINKRONISASI KE APPOINTMENT: Update fee di appointment yang sesuai
-    const apptIdx = (state.appointments || []).findIndex(a =>
-        a.patientId === data.patientId &&
-        a.date === data.date &&
-        (a.status === 'CONFIRMED' || !a.status) &&
-        (a.paymentStatus !== 'PAID')
-    );
-    if (apptIdx > -1) {
-        state.appointments[apptIdx].fee = data.fee;
-        state.appointments[apptIdx].updatedAt = new Date().toISOString();
-        console.log(`Synced fee ${data.fee} to appointment ${state.appointments[apptIdx].id}`);
-    }
-
     saveData();
     if (state.scriptUrl) syncDelta();
     if (state.scriptUrl) pushDataToSheet();
 
-    if (data.plan && data.plan.includes('Lanjut')) {
-        let freq = 'once';
-        if (data.plan.includes('1x')) freq = '1x';
-        else if (data.plan.includes('2x')) freq = '2x';
-        else if (data.plan.includes('3x')) freq = '3x';
-
-        if (confirm(`Rencana terapi: ${data.plan}. \nApakah Anda ingin membuat jadwal otomatis sekarang?`)) {
-            openAppointmentModal(new Date().toISOString().slice(0, 10), null, { patientId: data.patientId, freq: freq });
-            return;
-        }
-    }
     navigate('assessments');
 }
 
@@ -2104,38 +2058,10 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Tanggal Mulai</label><input type="date" name="date" value="${appt.date}" required class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Jam</label><input type="time" name="time" value="${appt.time}" required class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Terapis</label><select name="therapistId" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">${state.users.map(u => `<option value="${u.username}" ${u.username === appt.therapistId ? 'selected' : ''}>${u.name}</option>`).join('')}</select></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Tarif (Rp)</label><input type="number" name="fee" id="appt-fee" value="${appt.fee || 0}" step="5000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 bg-orange-50 border-orange-200"></div>
+                    <div class="grid grid-cols-1">
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Terapis</label><select name="therapistId" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold text-slate-700">${state.users.map(u => `<option value="${u.username}" ${u.username === appt.therapistId ? 'selected' : ''}>${u.name}</option>`).join('')}</select></div>
                     </div>
                     <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Catatan</label><textarea name="notes" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-20" placeholder="Contoh: Bawa bola, Cek tensi...">${appt.notes || ''}</textarea></div>
-                    ${!apptId ? `
-                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                        <label class="text-xs font-bold text-blue-800 uppercase block mb-2">Opsi Layanan & Paket</label>
-                        <div class="mb-3">
-                            <label class="text-[10px] text-blue-600 block mb-1">Pilih Paket (Auto-Fill)</label>
-                            <select onchange="applyPackageToAppointment(this.value)" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium">
-                                <option value="">-- Custom / Tanpa Paket --</option>
-                                ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 mb-3">
-                            <div>
-                                <label class="text-[10px] text-blue-600 block mb-1">Frekuensi</label>
-                                <select name="frequency" id="appt-frequency" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white" onchange="togglePacketCount(this.value)">
-                                    <option value="once" ${defaultFreq === 'once' ? 'selected' : ''}>Sekali Datang</option>
-                                    <option value="1x" ${defaultFreq === '1x' ? 'selected' : ''}>1x Seminggu (+7 hari)</option>
-                                    <option value="2x" ${defaultFreq === '2x' ? 'selected' : ''}>2x Seminggu (+3/4 hari)</option>
-                                    <option value="3x" ${defaultFreq === '3x' ? 'selected' : ''}>3x Seminggu (+2 hari)</option>
-                                </select>
-                            </div>
-                            <div id="packet-count-box" class="${defaultFreq === 'once' ? 'hidden' : ''}">
-                                <label class="text-[10px] text-blue-600 block mb-1">Total Sesi</label>
-                                <input type="number" name="packetCount" id="appt-packet-count" value="${defaultCount}" min="2" max="24" class="w-full text-sm border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
-                        </div>
-                        <p class="text-[10px] text-blue-500 italic">*Jadwal otomatis dibuat sesuai pola frekuensi.</p>
-                    </div>` : ''}
                     ${apptId && appt.groupId ? `<div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex items-start gap-2"><i data-lucide="layers" width="16" class="text-yellow-600 mt-0.5"></i><div><p class="text-xs font-bold text-yellow-800">Bagian dari Paket Terapi</p><p class="text-[10px] text-yellow-700">Jadwal ini terhubung dengan sesi lainnya.</p></div></div>` : ''}
                 </div>
             </form>
@@ -2247,37 +2173,6 @@ window.selectPatientSearch = function (id, name, fee) {
     renderClinicalGuidance(id);
 };
 
-function applyPackageToAppointment(packageId) {
-    const pkg = state.packages.find(p => p.id === packageId);
-    if (!pkg) return;
-
-    const feeInput = document.getElementById('appt-fee');
-    const freqSelect = document.getElementById('appt-frequency');
-    const countInput = document.getElementById('appt-packet-count');
-    const countBox = document.getElementById('packet-count-box');
-
-    if (feeInput) feeInput.value = Math.round(pkg.price / pkg.sessions);
-    if (countInput) countInput.value = pkg.sessions;
-
-    if (freqSelect) {
-        // Default to 2x for packages > 1 sessions
-        if (pkg.sessions > 1) {
-            if (freqSelect.value === 'once') {
-                freqSelect.value = '2x';
-                if (countBox) countBox.classList.remove('hidden');
-            }
-        } else {
-            freqSelect.value = 'once';
-            if (countBox) countBox.classList.add('hidden');
-        }
-    }
-}
-
-function togglePacketCount(val) {
-    const box = document.getElementById('packet-count-box');
-    if (val === 'once') box.classList.add('hidden'); else box.classList.remove('hidden');
-}
-
 function saveAppointment() {
     const form = document.getElementById('appt-form');
     const id = form.querySelector('[name="id"]').value;
@@ -2286,12 +2181,7 @@ function saveAppointment() {
     const time = form.querySelector('[name="time"]').value;
     const therapistId = form.querySelector('[name="therapistId"]').value;
     const notes = form.querySelector('[name="notes"]').value;
-    const fee = parseInt(form.querySelector('[name="fee"]').value) || 0;
     const patientType = form.querySelector('[name="patientType"]:checked')?.value || 'Klinik';
-
-    // New Params
-    const frequency = form.querySelector('[name="frequency"]')?.value || 'once';
-    const packetCount = parseInt(form.querySelector('[name="packetCount"]')?.value || '1');
 
     if (!patientId || !date || !time) { alert("Data wajib diisi!"); return; }
 
@@ -2310,7 +2200,7 @@ function saveAppointment() {
         }
     }
 
-    const updates = { patientId, time, therapistId, notes, fee, patientType, updatedAt: new Date().toISOString() };
+    const updates = { patientId, time, therapistId, notes, patientType, fee: 0, updatedAt: new Date().toISOString() };
 
     if (id) {
         const originalAppt = state.appointments.find(a => a.id === id);
@@ -2323,7 +2213,7 @@ function saveAppointment() {
                 () => { // All
                     state.appointments.forEach(a => {
                         if (a.groupId === originalAppt.groupId) {
-                            a.time = time; a.therapistId = therapistId; a.notes = notes; a.fee = fee;
+                            a.time = time; a.therapistId = therapistId; a.notes = notes;
                             a.updatedAt = new Date().toISOString();
                         }
                     });
@@ -2338,19 +2228,8 @@ function saveAppointment() {
             if (idx > -1) { state.appointments[idx] = { ...state.appointments[idx], ...updates, date }; finalizeSave(); }
         }
     } else {
-        const newAppointments = [];
-        let currentDate = new Date(date);
-        let totalSessions = (frequency === 'once') ? 1 : packetCount;
-        const newGroupId = (totalSessions > 1) ? 'GRP' + Date.now() : null;
-
-        for (let i = 0; i < totalSessions; i++) {
-            newAppointments.push({ id: `APT${Date.now()}-${i}`, date: currentDate.toISOString().slice(0, 10), ...updates, groupId: newGroupId, patientType });
-            if (frequency === '1x') currentDate.setDate(currentDate.getDate() + 7);
-            else if (frequency === '2x') currentDate.setDate(currentDate.getDate() + (i % 2 === 0 ? 3 : 4));
-            else if (frequency === '3x') { const mod = i % 3; currentDate.setDate(currentDate.getDate() + (mod === 2 ? 3 : 2)); }
-        }
-        state.appointments.push(...newAppointments);
-        alert(`${newAppointments.length} jadwal berhasil dibuat!`);
+        const newId = `APT${Date.now()}`;
+        state.appointments.push({ id: newId, date, ...updates, groupId: null });
         finalizeSave();
     }
 }
@@ -2453,18 +2332,10 @@ function openPatientModal(id = null) {
                         </label>
                     </div>
                 </div>
-                <div class="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                    <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold text-purple-800 uppercase flex items-center gap-1"><i data-lucide="package" width="14"></i> Paket & Tarif</label><span class="text-[10px] text-purple-600 bg-white px-2 py-0.5 rounded border border-purple-100">Opsional</span></div>
-                    <div class="mb-3">
-                        <label class="text-[10px] text-purple-700 block mb-1">Pilih Paket (Auto-Fill)</label>
-                        <select onchange="applyPackageToPatient(this.value)" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm bg-white font-medium">
-                            <option value="">-- Custom / Tanpa Paket --</option>
-                            ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="grid grid-cols-1">
-                        <div><label class="text-[10px] text-purple-700 block mb-1">Tarif Per Datang (Rp)</label><input type="number" name="defaultFee" value="${p.defaultFee || 0}" step="5000" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-700"></div>
-                    </div>
+                <!-- Diagnosa Medis (Pindahkan ke sini agar lebih clean) -->
+                <div class="mb-4">
+                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Diagnosa Medis Utama</label>
+                    <input type="text" name="diagnosis" value="${p.diagnosis}" class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-800 font-bold bg-slate-50" placeholder="Diagnosa medis awal...">
                 </div>
                 <div class="space-y-4">
                     <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Lengkap</label><input type="text" name="name" value="${p.name}" required class="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-800"></div>
@@ -2479,7 +2350,6 @@ function openPatientModal(id = null) {
                     </div>
                     <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Pekerjaan</label><input type="text" name="job" value="${p.job}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                     <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat Domisili</label><textarea name="address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-20 resize-none placeholder-slate-300" placeholder="Jalan, RT/RW, Kelurahan...">${p.address || ''}</textarea></div>
-                    <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Diagnosa Medis</label><input type="text" name="diagnosis" value="${p.diagnosis}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                 </div>
             </form>
         </div>
@@ -2518,7 +2388,7 @@ function submitPatientForm() {
         address: form.querySelector('[name="address"]').value,
         diagnosis: form.querySelector('[name="diagnosis"]').value,
         quota: (state.patients.find(pt => pt.id === (form.querySelector('[name="id"]').value))?.quota) || 0,
-        defaultFee: parseInt(form.querySelector('[name="defaultFee"]').value) || 0,
+        defaultFee: (state.patients.find(pt => pt.id === (form.querySelector('[name="id"]').value))?.defaultFee) || 0,
         updatedAt: new Date().toISOString()
     };
 
@@ -4820,23 +4690,37 @@ function openPaymentModal(apptId) {
             </div>
         </div>
         <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1">
-            <!-- Rincian -->
-            <div class="bg-slate-50 rounded-xl p-4 space-y-2">
+            <!-- Rincian & Setting Tarif -->
+            <div class="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200 shadow-inner">
                 ${p && p.quota > 0 ? `
-                <div class="flex justify-between items-center bg-blue-100/50 p-2 rounded-lg mb-2">
-                    <div class="flex items-center gap-2"><i data-lucide="package" width="14" class="text-blue-600"></i><span class="text-xs font-bold text-blue-800">SISA PAKET TERSEDIA</span></div>
+                <div class="flex justify-between items-center bg-blue-100/50 p-2 rounded-lg">
+                    <div class="flex items-center gap-2"><i data-lucide="package" width="14" class="text-blue-600"></i><span class="text-[10px] font-black text-blue-800 uppercase">SISA PAKET TERSEDIA</span></div>
                     <span class="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] font-black">${p.quota} SESI</span>
                 </div>` : ''}
-                <div class="flex justify-between text-sm"><span class="text-slate-500">Biaya Fisioterapi</span><span class="font-bold">${formatRp(feeBase)}</span></div>
-                <div class="flex justify-between text-sm items-center">
-                    <span class="text-slate-500">Diskon (Rp)</span>
-                    <input type="number" id="pm-discount" value="0" min="0" max="${feeBase}"
-                        oninput="handlePaymentUpdate(${feeBase})"
-                        class="w-32 text-right border-2 border-slate-200 rounded-lg px-2 py-1 text-sm focus:border-blue-500 outline-none">
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Pilih Paket (Jika Beli Baru)</label>
+                        <select id="pm-package-buy" onchange="handlePackageBuy(this.value)" class="w-full text-xs border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold">
+                            <option value="">-- Hanya Layanan Biasa --</option>
+                            ${(state.packages || []).map(pkg => `<option value="${pkg.id}">${pkg.name} (${pkg.sessions} Sesi)</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Biaya Layanan (Rp)</label>
+                        <input type="number" id="pm-fee-base" value="${feeBase || 0}" step="5000" oninput="handlePaymentUpdateManual()" class="w-full border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-700 bg-white">
+                    </div>
                 </div>
-                <div class="border-t border-slate-200 pt-2 flex justify-between font-bold text-base">
-                    <span>TOTAL TAGIHAN</span>
-                    <span id="pm-total" class="text-blue-600">${formatRp(feeBase)}</span>
+
+                <div class="flex justify-between text-sm items-center pt-1">
+                    <span class="text-slate-500 font-bold text-xs uppercase">Diskon Potongan (Rp)</span>
+                    <input type="number" id="pm-discount" value="0" min="0" oninput="handlePaymentUpdateManual()"
+                        class="w-32 text-right border-2 border-slate-200 rounded-lg px-2 py-1 text-sm focus:border-blue-500 outline-none font-bold">
+                </div>
+                
+                <div class="border-t border-slate-200 pt-2 flex justify-between items-center">
+                    <span class="font-bold text-slate-400 text-xs uppercase tracking-widest">TOTAL TAGIHAN</span>
+                    <span id="pm-total" class="text-2xl font-black text-blue-600">${formatRp(feeBase)}</span>
                 </div>
             </div>
 
@@ -4845,7 +4729,7 @@ function openPaymentModal(apptId) {
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
                 <div class="grid grid-cols-2 xs:grid-cols-5 gap-2" id="pm-method-group">
                     ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'QRIS', 'BPJS'] : ['Tunai', 'Transfer', 'QRIS', 'BPJS']).map(m => `
-                    <button type="button" onclick="selectPaymentMethod('${m}', ${feeBase})" id="pm-${m}"
+                    <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
                         class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
                         <div class="text-xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
                         <div class="text-[10px] uppercase">${m}</div>
@@ -4877,7 +4761,17 @@ function openPaymentModal(apptId) {
         </div>`;
 
     // Global helper for this modal
-    window.handlePaymentUpdate = (fee) => {
+    window.handlePackageBuy = (id) => {
+        const pkg = state.packages.find(x => x.id === id);
+        const feeInput = document.getElementById('pm-fee-base');
+        if (pkg && feeInput) {
+            feeInput.value = pkg.price;
+            handlePaymentUpdateManual();
+        }
+    };
+
+    window.handlePaymentUpdateManual = () => {
+        const fee = Number(document.getElementById('pm-fee-base')?.value) || 0;
         const disc = Number(document.getElementById('pm-discount')?.value) || 0;
         state._currentDiscount = disc;
         updatePaymentTotal(fee);
@@ -4903,15 +4797,16 @@ function openPaymentModal(apptId) {
     renderIcons();
 }
 
-function selectPaymentMethod(method, feeBase) {
+function selectPaymentMethod(method) {
     state._selectedPaymentMethod = method;
 
-    // Auto discount for 'Paket'
+    // Auto discount for 'Paket' (Session Usage)
     if (method === 'Paket') {
+        const fee = Number(document.getElementById('pm-fee-base')?.value) || 0;
         const discInput = document.getElementById('pm-discount');
         if (discInput) {
-            discInput.value = feeBase;
-            handlePaymentUpdate(feeBase);
+            discInput.value = fee;
+            handlePaymentUpdateManual();
         }
     }
     // Update button styles
@@ -4948,14 +4843,16 @@ async function confirmPayment(apptId) {
     const a = (state.appointments || []).find(x => x.id === apptId);
     if (!a) return;
 
+    const feeBase = Number(document.getElementById('pm-fee-base')?.value) || 0;
     const discount = Number(document.getElementById('pm-discount')?.value) || 0;
-    const feeBase = parseRp(a.fee);
     const finalAmount = Math.max(0, feeBase - discount);
     const method = state._selectedPaymentMethod;
+    const packageIdBought = document.getElementById('pm-package-buy')?.value;
 
     if (!method) { alert('Pilih metode pembayaran!'); return; }
 
     // Update state
+    a.fee = feeBase;
     a.paymentStatus = 'PAID';
     a.paymentMethod = method;
     a.discount = discount;
@@ -4963,14 +4860,24 @@ async function confirmPayment(apptId) {
     a.paidAt = new Date().toISOString();
     a.updatedAt = new Date().toISOString();
 
-    // Auto Deduct Quota
+    // Auto Quota Management
     const pIdx = state.patients.findIndex(p => p.id === a.patientId);
     if (pIdx > -1) {
         let patient = state.patients[pIdx];
-        if (patient.quota && patient.quota > 0) {
+
+        // 1. If bought a package
+        if (packageIdBought) {
+            const pkg = state.packages.find(x => x.id === packageIdBought);
+            if (pkg) {
+                patient.quota = (patient.quota || 0) + pkg.sessions;
+                console.log(`Add package ${pkg.name}. New quota: ${patient.quota}`);
+            }
+        }
+
+        // 2. If using 'Paket' for this session
+        if (method === 'Paket' && patient.quota > 0) {
             patient.quota = patient.quota - 1;
-            console.log(`Quota deducted for ${patient.name}. Remaining: ${patient.quota}`);
-            // If quota becomes 0, we might want to alert, but since it's in a modal, maybe just console log or show in the success message
+            console.log(`Used 1 session. Remaining: ${patient.quota}`);
         }
     }
 
