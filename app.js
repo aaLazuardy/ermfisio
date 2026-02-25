@@ -2865,16 +2865,21 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_QRIS', value: state.clinicInfo.qrisImage }
             ];
 
-            await fetch(LICENSE_API_URL, {
-                method: 'POST', mode: 'no-cors',
+            const resp = await fetch(GAS_API_URL, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'sync_incremental',
+                    action: 'save_config',
                     sheet_id: sheetId,
                     config: configItems
                 })
             });
-            alert('Identitas Klinik Berhasil Disimpan & Disinkronkan ke Cloud!');
+
+            if (!resp.ok) throw new Error("Gagal terhubung ke Cloud.");
+            const result = await resp.json();
+            if (result.status !== 'success') throw new Error(result.message || "Gagal menyimpan.");
+
+            alert('Identity Klinik berhasil diperbarui & disinkronkan ke Cloud!');
         } catch (e) {
             console.warn("Sync failed, saved locally:", e);
             alert('Tersimpan secara lokal (Sinkronisasi Gagal).');
@@ -3012,8 +3017,8 @@ async function saveBookingConfig() {
             const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
             if (!sheetId) throw new Error("Sheet ID tidak ditemukan.");
 
-            await fetch(LICENSE_API_URL, {
-                method: 'POST', mode: 'no-cors',
+            const resp = await fetch(LICENSE_API_URL, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'save_booking_config',
@@ -3022,7 +3027,12 @@ async function saveBookingConfig() {
                     available_hours: state.bookingConfig.availableHours
                 })
             });
-            alert(`✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nLink booking Anda siap digunakan.`);
+
+            if (!resp.ok) throw new Error("Gagal terhubung ke Cloud (HTTP Error).");
+            const result = await resp.json();
+            if (result.status !== 'success') throw new Error(result.message || "Gagal menyimpan di Cloud.");
+
+            alert('✅ Konfigurasi Booking Berhasil Disimpan & Disinkronkan!\n\nLink booking Anda siap digunakan.');
         } catch (e) {
             console.warn('Sync failed:', e);
             alert('Tersimpan Lokal (Gagal sinkron ke Cloud).');
