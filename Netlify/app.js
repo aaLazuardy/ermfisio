@@ -1959,18 +1959,10 @@ function saveAssessment() {
             return;
         }
 
-        const cleanUrl = state.scriptUrl.trim();
-        const activeSheetId = state.sheetId || getSheetIdFromUrl(cleanUrl);
+        const activeSheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
 
-        // DETEKSI URL /DEV (Sering menyebabkan 401)
-        if (cleanUrl.toLowerCase().endsWith('/dev')) {
-            alert("PERINGATAN: Anda menggunakan URL '/dev' (Test Deployment).\n\n" +
-                "URL /dev hanya bisa diakses oleh Anda sendiri di browser yang sedang login.\n" +
-                "Silakan gunakan URL /exec dari 'Manage Deployments' untuk penggunaan publik agar tidak error 401.");
-        }
-
-        console.log("Attempting upload to:", cleanUrl.substring(0, 40) + "...");
-        console.log("Using sheetId:", activeSheetId);
+        console.log("Centralized Upload via Master Script...");
+        console.log("Target Client Sheet:", activeSheetId);
 
         showToast("Sedang mengunggah berkas penunjang...", "info");
         const payload = {
@@ -1981,9 +1973,9 @@ function saveAssessment() {
             sheet_id: activeSheetId
         };
 
-        // Menggunakan text/plain agar dianggap sebagai 'Simple Request' oleh browser
-        // Ini menghindari CORS preflight (OPTIONS) yang sering gagal pada Google Apps Script
-        fetch(cleanUrl, {
+        // SELALU gunakan LICENSE_API_URL (Script Master) untuk upload
+        // Karena klien hanya punya Sheet, tidak punya Script sendiri.
+        fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
