@@ -81,16 +81,28 @@ function doGet(e) {
         const headers = data[0].map(h => String(h).toLowerCase().trim());
         const colAlias = headers.indexOf('alias');
         const colStatus = headers.indexOf('status');
-        const colName = headers.indexOf('client_name');
-        const colSheetId = headers.indexOf('sheet id') !== -1 ? headers.indexOf('sheet id') : headers.indexOf('sheet_id');
+        const colName = headers.indexOf('client_name') !== -1 ? headers.indexOf('client_name') : headers.indexOf('client name');
+        const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
         const colHours = headers.indexOf('available_hours');
         
         if (colAlias === -1) return createJSONOutput({ status: 'error', message: 'Kolom Alias tidak ditemukan di tab Licenses.' });
+        if (colStatus === -1) return createJSONOutput({ status: 'error', message: 'Kolom Status tidak ditemukan di tab Licenses.' });
         
         const row = data.find((r, i) => i > 0 && r[colAlias] && String(r[colAlias]).toLowerCase().trim() === String(alias).toLowerCase().trim() && String(r[colStatus]).trim() === 'ACTIVE');
         if (row) {
-            let hours = colHours !== -1 && row[colHours] ? String(row[colHours]).split(',').map(h => h.trim()) : ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
-            const sheetId = colSheetId !== -1 ? row[colSheetId] : '';
+            const defaultHours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
+            let hoursRaw = colHours !== -1 ? String(row[colHours] || "").trim() : "";
+            let hours = hoursRaw ? hoursRaw.split(',').map(h => h.trim()).filter(h => h) : defaultHours;
+            let sheetId = colSheetId !== -1 ? String(row[colSheetId] || "").trim() : '';
+            
+            // Robust ID extraction if stored as URL
+            if (sheetId.includes('/d/')) {
+                const match = sheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                if (match) sheetId = match[1];
+            }
+
+            const clinicName = colName !== -1 && row[colName] ? row[colName] : (row[colAlias] || 'Klinik');
+            Logger.log(`[get_clinic_info] Found Clinic: ${clinicName} | SheetID: ${sheetId}`);
 
             // LOGIKA FILTER SLOT TERISI
             if (selectedDate && sheetId) {
@@ -103,7 +115,16 @@ function doGet(e) {
                         for (let i = 1; i < apptRows.length; i++) {
                             let rDate = apptRows[i][2]; // Kolom Date
                             if (rDate instanceof Date) rDate = Utilities.formatDate(rDate, TIMEZONE, "yyyy-MM-dd");
-                            const rTime = String(apptRows[i][3]).trim(); // Kolom Time
+                            
+                            // NORMALIZE TIME (Handle both String and Date objects from Sheets)
+                            let rTimeRaw = apptRows[i][3];
+                            let rTime = "";
+                            if (rTimeRaw instanceof Date) {
+                                rTime = Utilities.formatDate(rTimeRaw, TIMEZONE, "HH:mm");
+                            } else {
+                                rTime = String(rTimeRaw).trim().substring(0, 5); // Keep "HH:mm"
+                            }
+                            
                             const rStatus = apptRows[i][8]; // Kolom Status
                             if (rDate === selectedDate && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
                                 bookedHours.push(rTime);
@@ -117,7 +138,7 @@ function doGet(e) {
 
             return createJSONOutput({
                 status: 'success',
-                clinic_name: colName !== -1 ? row[colName] : 'Klinik',
+                clinic_name: clinicName,
                 sheet_id: sheetId,
                 available_hours: hours
             });
@@ -127,6 +148,7 @@ function doGet(e) {
     }
 
     if (action === "pull") {
+        checkAndFixColumns(ss); // Auto-repair schema on pull
         return createJSONOutput({
             patients: getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
             assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
@@ -227,12 +249,14 @@ function doPost(e) {
 
             // ACTION: SAVE CONFIG
             if (data.action === 'save_config') {
+                checkAndFixColumns(ss);
                 if (data.config) updateConfigSheet(ss, data.config);
                 return createJSONOutput({ status: "success" });
             }
 
             // ACTION: PUSH DATA (FULL OVERWRITE)
             if (data.action === "push") {
+                checkAndFixColumns(ss); // Auto-repair schema on push
                 if (data.patients) saveDataFixed(ss, SHEET_NAMES.PATIENTS, data.patients, HEADERS.PATIENTS);
                 if (data.assessments) saveDataFixed(ss, SHEET_NAMES.ASSESSMENTS, data.assessments, HEADERS.ASSESSMENTS);
                 if (data.appointments) saveDataFixed(ss, SHEET_NAMES.APPOINTMENTS, data.appointments, HEADERS.APPOINTMENTS);
@@ -244,6 +268,7 @@ function doPost(e) {
 
             // ACTION: SMART SYNC (INCREMENTAL)
             if (data.action === "sync_incremental" || data.action === "delta_push") {
+                checkAndFixColumns(ss); // Auto-repair schema on incremental sync
                 processIncrementalSync(ss, data);
                 return createJSONOutput({ status: "success", message: "Sync Completed" });
             }
@@ -323,18 +348,43 @@ function doPost(e) {
 
             // ACTION: SAVE BOOKING CONFIG (Alias + Available Hours) to Licenses sheet
             if (data.action === 'save_booking_config') {
-                const licSheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet(); 
+                checkAndFixColumns(ssMaster); // Ensure headers exist
+                
+                const licSheet = ssMaster.getSheetByName(SHEET_NAMES.LICENSES);
                 if (!licSheet) return createJSONOutput({ status: 'error', message: 'Licenses sheet not found' });
                 const rows = licSheet.getDataRange().getValues();
-                // Find row where sheet_id (col 6) matches
+                const headers = rows[0].map(h => String(h).toLowerCase().trim());
+                
+                const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
+                const colAlias = headers.indexOf('alias');
+                const colHours = headers.indexOf('available_hours');
+                
+                if (colSheetId === -1 || colAlias === -1 || colHours === -1) {
+                   return createJSONOutput({ status: 'error', message: 'Kolom database Master tidak lengkap.' });
+                }
+
                 for (let i = 1; i < rows.length; i++) {
-                    if (String(rows[i][6]) === String(data.sheet_id)) {
-                        licSheet.getRange(i + 1, 8).setValue(data.alias || ''); // H = alias
-                        licSheet.getRange(i + 1, 9).setValue(data.available_hours || ''); // I = available_hours
+                    let rowSheetId = String(rows[i][colSheetId] || "").trim();
+                    // Handle if rowSheetId is a URL
+                    if (rowSheetId.includes('/d/')) {
+                        const match = rowSheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                        if (match) rowSheetId = match[1];
+                    }
+                    
+                    let targetId = String(data.sheet_id).trim();
+                    if (targetId.includes('/d/')) {
+                        const match = targetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                        if (match) targetId = match[1];
+                    }
+
+                    if (rowSheetId === targetId && targetId !== "") {
+                        licSheet.getRange(i + 1, colAlias + 1).setValue(data.alias || '');
+                        licSheet.getRange(i + 1, colHours + 1).setValue(data.available_hours || '');
                         return createJSONOutput({ status: 'success' });
                     }
                 }
-                return createJSONOutput({ status: 'error', message: 'Sheet ID not found in Licenses.' });
+                return createJSONOutput({ status: 'error', message: 'Sheet ID tidak ditemukan di Master.' });
             }
 
             return createJSONOutput({ status: "error", message: "Unknown action" });

@@ -147,6 +147,7 @@ function processIncrementalSync(ss, changes) {
     if (changes.assessments) merge(SHEET_NAMES.ASSESSMENTS, HEADERS.ASSESSMENTS, changes.assessments);
     if (changes.appointments) merge(SHEET_NAMES.APPOINTMENTS, HEADERS.APPOINTMENTS, changes.appointments);
     if (changes.expenses) merge(SHEET_NAMES.EXPENSES, HEADERS.EXPENSES, changes.expenses);
+    if (changes.packages) merge(SHEET_NAMES.PACKAGES, HEADERS.PACKAGES, changes.packages);
     if (changes.config) updateConfigSheet(ss, changes.config);
 
     // Handle Deletions
@@ -156,6 +157,7 @@ function processIncrementalSync(ss, changes) {
         if (del.assessments && del.assessments.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.ASSESSMENTS), del.assessments);
         if (del.appointments && del.appointments.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.APPOINTMENTS), del.appointments);
         if (del.expenses && del.expenses.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.EXPENSES), del.expenses);
+        if (del.packages && del.packages.length > 0) deleteRowsById(ss.getSheetByName(SHEET_NAMES.PACKAGES), del.packages);
     }
 }
 
@@ -181,7 +183,9 @@ function checkAndFixColumns(ss) {
         { name: SHEET_NAMES.ASSESSMENTS, headers: HEADERS.ASSESSMENTS },
         { name: SHEET_NAMES.APPOINTMENTS, headers: HEADERS.APPOINTMENTS },
         { name: SHEET_NAMES.CONFIG, headers: HEADERS.CONFIG },
-        { name: SHEET_NAMES.EXPENSES, headers: HEADERS.EXPENSES }
+        { name: SHEET_NAMES.EXPENSES, headers: HEADERS.EXPENSES },
+        { name: SHEET_NAMES.PACKAGES, headers: HEADERS.PACKAGES },
+        { name: SHEET_NAMES.LICENSES, headers: HEADERS.LICENSES }
     ];
 
     let logs = [];
@@ -189,25 +193,25 @@ function checkAndFixColumns(ss) {
     sheetsToCheck.forEach(item => {
         const sheet = ss.getSheetByName(item.name);
         if (!sheet) {
-            // Sheet missing, getOrInsertSheet will handle it later, but good to know
-            logs.push(`[${item.name}] Sheet missing. Will be created on next sync.`);
+            logs.push(`[${item.name}] Tab tidak ditemukan. Menambah tab baru.`);
+            getOrInsertSheet(ss, item.name, item.headers);
             return;
         }
 
-        const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        const lastCol = sheet.getLastColumn();
+        const currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
         const missingHeaders = item.headers.filter(h => !currentHeaders.includes(h));
 
         if (missingHeaders.length > 0) {
-            // Append missing headers
-            const startCol = sheet.getLastColumn() + 1;
+            const startCol = lastCol + 1;
             sheet.getRange(1, startCol, 1, missingHeaders.length)
                 .setValues([missingHeaders])
                 .setFontWeight("bold")
-                .setBackground("#dbeafe"); // Light Blue match
+                .setBackground("#dbeafe");
             
-            logs.push(`[${item.name}] Added columns: ${missingHeaders.join(', ')}`);
+            logs.push(`[${item.name}] Menambah kolom: ${missingHeaders.join(', ')}`);
         } else {
-            logs.push(`[${item.name}] All columns present.`);
+            logs.push(`[${item.name}] Ok.`);
         }
     });
 

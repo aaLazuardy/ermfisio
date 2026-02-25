@@ -146,38 +146,54 @@ function cleanupExpiredLicenses() {
 // ==========================================
 
 function resolveClinicAlias(alias) {
-  if (!alias) return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'Alias kosong' })).setMimeType(ContentService.MimeType.JSON);
+  if (!alias) return createJSONOutput({ status: 'error', message: 'Alias kosong' });
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Licenses');
-  const data = sheet.getDataRange().getValues();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+  if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
   
-  // Mencari Alias di Kolom G (Index 6)
-  const row = data.find(r => r[6] && String(r[6]).toLowerCase() === String(alias).toLowerCase());
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+  const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
+  const colAlias = headers.indexOf('alias');
+  
+  if (colAlias === -1 || colSheetId === -1) return createJSONOutput({ status: 'error', message: 'Struktur Master tidak lengkap.' });
+
+  // Cari Alias
+  const row = data.find((r, i) => i > 0 && r[colAlias] && String(r[colAlias]).toLowerCase().trim() === String(alias).toLowerCase().trim());
 
   if (row) {
-    return ContentService.createTextOutput(JSON.stringify({ 
+    return createJSONOutput({ 
       status: 'success', 
-      sheet_id: row[7] // Mengembalikan ID Sheet dari Kolom H (Index 7)
-    })).setMimeType(ContentService.MimeType.JSON);
+      sheet_id: row[colSheetId]
+    });
   } else {
-    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'Klinik tidak ditemukan' })).setMimeType(ContentService.MimeType.JSON);
+    return createJSONOutput({ status: 'error', message: 'Klinik tidak ditemukan' });
   }
 }
 
 function registerClinicAlias(licenseKey, alias, sheetId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Licenses');
-  const data = sheet.getDataRange().getValues();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+  if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
   
-  // Cari baris berdasarkan License Key (Kolom A / Index 0)
-  const rowIndex = data.findIndex(r => String(r[0]) === String(licenseKey));
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+  const colKey = 0;
+  const colSheetId = headers.indexOf('sheet_id') !== -1 ? headers.indexOf('sheet_id') : headers.indexOf('sheet id');
+  const colAlias = headers.indexOf('alias');
+
+  if (colAlias === -1 || colSheetId === -1) return createJSONOutput({ status: 'error', message: 'Struktur Master tidak lengkap.' });
+  
+  // Cari baris berdasarkan License Key
+  const rowIndex = data.findIndex(r => String(r[colKey]).trim() === String(licenseKey).trim());
 
   if (rowIndex > -1) {
-    // Simpan Alias ke Kolom G (Index 6) & Sheet ID ke Kolom H (Index 7)
-    sheet.getRange(rowIndex + 1, 7).setValue(alias);   
-    sheet.getRange(rowIndex + 1, 8).setValue(sheetId); 
+    sheet.getRange(rowIndex + 1, colAlias + 1).setValue(alias);   
+    sheet.getRange(rowIndex + 1, colSheetId + 1).setValue(sheetId); 
     
-    return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'Data Klinik Berhasil Disambungkan!' })).setMimeType(ContentService.MimeType.JSON);
+    return createJSONOutput({ status: 'success', message: 'Data Klinik Berhasil Disambungkan!' });
   } else {
-    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'Lisensi Tidak Valid' })).setMimeType(ContentService.MimeType.JSON);
+    return createJSONOutput({ status: 'error', message: 'Lisensi Tidak Valid' });
   }
 }

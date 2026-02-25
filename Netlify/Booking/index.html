@@ -221,19 +221,23 @@
 
             // Set min date to today
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('inp-date').setAttribute('min', today);
+            const dateInput = document.getElementById('inp-date');
+            if (dateInput) {
+                dateInput.setAttribute('min', today);
+                dateInput.value = today; // Default to today
+            }
 
             // Get alias from URL
             const urlParams = new URLSearchParams(window.location.search);
             const alias = urlParams.get('id');
 
             if (!alias) {
-                showError('URL tidak valid. Gunakan format: <b>booking/?id=nama-klinik</b>');
+                showError('ID Klinik tidak ditemukan. Periksa kembali link Anda.');
                 return;
             }
 
             if (!GAS_API_URL) {
-                showError('Konfigurasi sistem belum lengkap. Hubungi admin.');
+                showError('Konfigurasi server (LICENSE_API_URL) belum diatur.');
                 return;
             }
 
@@ -244,15 +248,19 @@
 
                 if (result.status === 'success') {
                     clinicConfig = result;
-                    document.getElementById('clinic-name-display').innerText = result.clinic_name || 'Klinik Fisioterapi';
+                    const nameDisplay = document.getElementById('clinic-name-display');
+                    if (nameDisplay) nameDisplay.innerText = result.clinic_name || 'Klinik Fisioterapi';
                     document.title = 'Booking - ' + (result.clinic_name || 'Klinik');
+
                     showBookingCard();
+                    // Load slots for default date (today)
+                    updateAvailableSlots();
                 } else {
                     showError(result.message || 'Klinik tidak ditemukan.');
                 }
             } catch (err) {
-                console.error(err);
-                showError('Gagal menghubungi server. Periksa koneksi internet.');
+                console.error("Fetch Error:", err);
+                showError('Gagal memuat data dari Cloud. Pastikan koneksi internet aktif.');
             }
         });
 
@@ -275,7 +283,7 @@
             if (!date) return;
 
             const container = document.getElementById('time-slots');
-            container.innerHTML = `<div class="flex items-center gap-2 text-xs text-blue-500 font-bold py-2"><i data-lucide="loader-2" class="animate-spin" width="14"></i><span>Mengecek slot kosong...</span></div>`;
+            container.innerHTML = `<div class="w-full flex items-center justify-center p-4"><i data-lucide="loader-2" class="animate-spin text-blue-500" width="24"></i></div>`;
             lucide.createIcons();
 
             const urlParams = new URLSearchParams(window.location.search);
@@ -284,25 +292,29 @@
             document.getElementById('inp-time').value = '';
 
             try {
-                // Fetch ULANG info klinik dengan parameter date agar backend bisa filter slot terisi
-                const resp = await fetch(`${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&date=${date}&t=${Date.now()}`);
+                const url = `${GAS_API_URL}?action=get_clinic_info&alias=${encodeURIComponent(alias)}&date=${date}&t=${Date.now()}`;
+                const resp = await fetch(url);
                 const result = await resp.json();
 
                 if (result.status === 'success') {
                     const hours = result.available_hours || [];
                     if (hours.length === 0) {
-                        container.innerHTML = '<p class="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-100 italic">Maaf, semua slot di tanggal ini sudah penuh.</p>';
+                        container.innerHTML = `
+                            <div class="w-full bg-red-50 p-4 rounded-2xl border border-red-100 text-center">
+                                <p class="text-xs text-red-600 font-bold mb-1">Maaf, slot penuh.</p>
+                                <p class="text-[10px] text-red-400">Silakan pilih tanggal lain.</p>
+                            </div>`;
                     } else {
                         container.innerHTML = hours.map(h => `
                             <button type="button" class="time-chip" onclick="selectTime(this, '${h}')">${h}</button>
                         `).join('');
                     }
                 } else {
-                    container.innerHTML = '<p class="text-xs text-red-500 italic">Gagal memuat jam. Coba lagi.</p>';
+                    container.innerHTML = `<p class="text-xs text-red-500 p-2">${result.message || 'Gagal memuat jam.'}</p>`;
                 }
             } catch (err) {
-                console.error(err);
-                container.innerHTML = '<p class="text-xs text-red-500 italic">Error koneksi server.</p>';
+                console.error("Slots Error:", err);
+                container.innerHTML = '<p class="text-xs text-red-500 p-2">Terjadi gangguan koneksi.</p>';
             }
             lucide.createIcons();
         }
