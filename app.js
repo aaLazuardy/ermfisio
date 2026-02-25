@@ -1449,6 +1449,7 @@ function deletePatient(id) {
         state.patients = state.patients.filter(p => p.id !== id);
         state.assessments = state.assessments.filter(a => a.patientId !== id);
         saveData();
+        if (state.scriptUrl) syncDelta();
         filterPatients();
     }
 }
@@ -1565,6 +1566,7 @@ function deleteAssessment(id) {
 
         state.assessments = state.assessments.filter(a => a.id !== id);
         saveData();
+        if (state.scriptUrl) syncDelta();
         renderAssessmentList(document.getElementById('main-content'));
     }
 }
@@ -1978,6 +1980,7 @@ function saveAssessment() {
     }
 
     saveData();
+    if (state.scriptUrl) syncDelta();
     if (state.scriptUrl) pushDataToSheet();
 
     if (data.plan && data.plan.includes('Lanjut')) {
@@ -2305,6 +2308,7 @@ function confirmAppointment(id) {
         state.appointments[idx].status = 'CONFIRMED';
         state.appointments[idx].updatedAt = new Date().toISOString();
         saveData();
+        if (state.scriptUrl) syncDelta();
         if (state.scriptUrl) pushDataToSheet();
         alert("Booking Diterima!");
         closeModal();
@@ -2339,6 +2343,7 @@ function deleteAppointment(id) {
 
 function finalizeSave() {
     saveData();
+    if (state.scriptUrl) syncDelta();
     if (state.scriptUrl) pushDataToSheet();
     closeModal();
     document.getElementById('choice-modal').classList.add('hidden');
@@ -2348,6 +2353,7 @@ function finalizeSave() {
 
 function finalizeDelete() {
     saveData();
+    if (state.scriptUrl) syncDelta();
     closeModal();
     document.getElementById('choice-modal').classList.add('hidden');
     renderScheduleView(document.getElementById('main-content'));
@@ -4400,6 +4406,7 @@ function saveExpense() {
     state.expenses.push(entry);
 
     saveData();
+    if (state.scriptUrl) syncDelta();
     closeModal();
     renderKasirView(document.getElementById('main-content'));
     showToast("Catatan pengeluaran berhasil disimpan.");
@@ -4409,6 +4416,7 @@ function deleteExpense(id) {
     if (!confirm('Hapus selamanya catatan pengeluaran ini?')) return;
     state.expenses = (state.expenses || []).filter(e => e.id !== id);
     saveData();
+    if (state.scriptUrl) syncDelta();
     renderKasirView(document.getElementById('main-content'));
     showToast("Data pengeluaran dihapus.");
 }
@@ -4883,6 +4891,7 @@ async function confirmPayment(apptId) {
     a.updatedAt = new Date().toISOString();
 
     saveData();
+    if (state.scriptUrl) syncDelta();
 
     // UI Feedback Sukses & Opsi Cetak
     const content = document.getElementById('modal-content');
