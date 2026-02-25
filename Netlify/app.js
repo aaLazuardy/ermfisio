@@ -36,6 +36,8 @@ let state = {
         showAnamnesis: true, showBodyChart: true, showObjective: true,
         showImpairment: true, showLimitation: true, showIntervention: true,
         showEvalPlan: true, showSignature: true,
+        showInformedConsent: true,
+        informedConsentText: 'Dengan ini saya menyatakan bahwa saya memberikan persetujuan kepada Fisioterapis untuk melakukan tindakan pemeriksaan dan terapi sesuai dengan standar profesi. Saya telah mendapatkan penjelasan mengenai tujuan, risiko, dan manfaat dari tindakan tersebut.',
         fontFamily: 'sans', fontSize: '10pt'
     },
     clinicInfo: {
@@ -2848,7 +2850,20 @@ function renderConfigView(container) {
                         ${renderPdfToggle('showLimitation', 'Limitation (Act & Part)', conf.showLimitation)}
                         ${renderPdfToggle('showIntervention', 'Intervensi & Terapi', conf.showIntervention)}
                         ${renderPdfToggle('showEvalPlan', 'Evaluasi & Rencana', conf.showEvalPlan)}
-                        ${renderPdfToggle('showSignature', 'Kolom Tanda Tangan', conf.showSignature)}
+                        ${renderPdfToggle('showSignature', 'Tanda Tangan', conf.showSignature)}
+                        ${renderPdfToggle('showInformedConsent', 'Informed Consent (Persetujuan)', conf.showInformedConsent)}
+                    </div>
+                    
+                    <div class="mt-8 border-t pt-6 bg-blue-50/50 -mx-6 px-6 -mb-6 rounded-b-xl pb-10">
+                        <h4 class="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                             <i data-lucide="file-signature" width="16"></i> Editor Teks Informed Consent
+                        </h4>
+                        <p class="text-[10px] text-slate-500 mb-3">Tuliskan bunyi persetujuan tindakan medis yang akan muncul di setiap hasil cetak asesmen.</p>
+                        <textarea 
+                            onchange="updatePdfConfig('informedConsentText', this.value)" 
+                            class="w-full border-2 border-slate-200 rounded-xl p-4 text-xs leading-relaxed focus:border-blue-500 outline-none h-32 bg-white"
+                            placeholder="Tuliskan teks persetujuan di sini..."
+                        >${conf.informedConsentText || ''}</textarea>
                     </div>
                 </div>
             </div>
@@ -3738,6 +3753,23 @@ function generateSingleAssessmentHTML(a, p) {
             ${conf.showIntervention ? `<div class="mb-3"><div class="flex flex-wrap gap-2 text-slate-700 text-[0.9em]">${(a.intervention && a.intervention.length > 0) ? a.intervention.map(i => `<span class="inline-block border border-slate-300 px-2 py-0.5 rounded bg-white">◻ ${i}</span>`).join('') : '-'}</div></div>` : ''}
             ${conf.showEvalPlan ? `<div class="bg-slate-50 border border-slate-200 rounded p-3 grid grid-cols-3 gap-4 text-[0.9em]"><div class="col-span-2"><span class="font-bold text-slate-500 uppercase block mb-1 text-[0.8em]">Evaluasi Sesi Ini:</span>${renderList(a.eval)}</div><div class="border-l border-slate-200 pl-4"><span class="font-bold text-slate-500 uppercase block mb-1 text-[0.8em]">Planning:</span><span class="font-black text-blue-600 block text-lg leading-tight">${a.plan || '-'}</span></div></div>` : ''}
         </div>
+
+        ${conf.showInformedConsent ? `
+        <div class="mt-10 mb-6 p-4 border border-slate-200 rounded-xl bg-slate-50/50 break-inside-avoid">
+            <h4 class="font-bold text-[0.8em] text-slate-500 uppercase mb-2">Persetujuan Pasien (Informed Consent)</h4>
+            <p class="text-[0.85em] leading-relaxed text-justify text-slate-700 italic">
+                "${conf.informedConsentText || '-'}"
+            </p>
+            <div class="mt-4 flex justify-between items-end">
+                <div class="text-[0.7em] text-slate-400">
+                    Dokumen ini sah dan disetujui secara digital oleh pasien/wali pasien pada saat pemeriksaan.
+                </div>
+                <div class="w-32 border-b border-slate-300 h-8"></div>
+            </div>
+            <div class="flex justify-end pr-4 mt-1">
+                <span class="text-[0.65em] text-slate-400 font-bold uppercase">Tanda Tangan/Paraf Pasien</span>
+            </div>
+        </div>` : ''}
 
         ${conf.showSignature ? `<div class="mt-8 flex justify-end break-inside-avoid"><div class="w-48 text-center"><p class="text-slate-500 mb-12 text-[0.8em]">Blitar, ${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p class="font-bold text-slate-900 border-b border-slate-400 inline-block pb-0.5">${state.clinicInfo.therapist}</p><p class="text-slate-500 mt-1 text-[0.7em]">SIPF: ${state.clinicInfo.sipf}</p></div></div>` : ''}
     </div>`;
