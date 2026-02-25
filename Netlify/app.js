@@ -1962,6 +1962,13 @@ function saveAssessment() {
         const cleanUrl = state.scriptUrl.trim();
         const activeSheetId = state.sheetId || getSheetIdFromUrl(cleanUrl);
 
+        // DETEKSI URL /DEV (Sering menyebabkan 401)
+        if (cleanUrl.toLowerCase().endsWith('/dev')) {
+            alert("PERINGATAN: Anda menggunakan URL '/dev' (Test Deployment).\n\n" +
+                "URL /dev hanya bisa diakses oleh Anda sendiri di browser yang sedang login.\n" +
+                "Silakan gunakan URL /exec dari 'Manage Deployments' untuk penggunaan publik agar tidak error 401.");
+        }
+
         console.log("Attempting upload to:", cleanUrl.substring(0, 40) + "...");
         console.log("Using sheetId:", activeSheetId);
 
@@ -1983,6 +1990,10 @@ function saveAssessment() {
             body: JSON.stringify(payload)
         })
             .then(res => {
+                if (res.status === 401) {
+                    throw new Error("HTTP 401 (Unauthorized). Akses Ditolak!\n\n" +
+                        "Penyebab:\n1. Anda menggunakan URL /dev (Gunakan /exec)\n2. Pengaturan 'Who has access' belum diatur ke 'Anyone'");
+                }
                 if (!res.ok) throw new Error("Server response not OK (HTTP " + res.status + ")");
                 return res.json();
             })
