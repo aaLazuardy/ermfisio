@@ -191,11 +191,27 @@ function doGet(e) {
     // ACTION: PULL DATA
     if (action === "pull") {
         checkAndFixColumns(ss, false); // Client structure
+        const limit = e.parameter.limit ? parseInt(e.parameter.limit, 10) : null;
         return createJSONOutput({
-            patients: getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
-            assessments: getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
-            appointments: getDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS),
-            expenses: getDataFromSheet(ss, SHEET_NAMES.EXPENSES),
+            patients: limit ? getDeltaDataFromSheet(ss, SHEET_NAMES.PATIENTS, null, limit) : getDataFromSheet(ss, SHEET_NAMES.PATIENTS),
+            assessments: limit ? getDeltaDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS, null, limit) : getDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS),
+            appointments: limit ? getDeltaDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS, null, limit) : getDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS),
+            expenses: limit ? getDeltaDataFromSheet(ss, SHEET_NAMES.EXPENSES, null, limit) : getDataFromSheet(ss, SHEET_NAMES.EXPENSES),
+            config: getDataFromSheet(ss, SHEET_NAMES.CONFIG),
+            packages: getDataFromSheet(ss, SHEET_NAMES.PACKAGES)
+        });
+    }
+
+    // ACTION: DELTA PULL
+    if (action === "delta_pull") {
+        checkAndFixColumns(ss, false);
+        const lastSync = e.parameter.last_sync;
+        const limit = e.parameter.limit ? parseInt(e.parameter.limit, 10) : 2000;
+        return createJSONOutput({
+            patients: getDeltaDataFromSheet(ss, SHEET_NAMES.PATIENTS, lastSync, limit),
+            assessments: getDeltaDataFromSheet(ss, SHEET_NAMES.ASSESSMENTS, lastSync, limit),
+            appointments: getDeltaDataFromSheet(ss, SHEET_NAMES.APPOINTMENTS, lastSync, limit),
+            expenses: getDeltaDataFromSheet(ss, SHEET_NAMES.EXPENSES, lastSync, limit),
             config: getDataFromSheet(ss, SHEET_NAMES.CONFIG),
             packages: getDataFromSheet(ss, SHEET_NAMES.PACKAGES)
         });

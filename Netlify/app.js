@@ -627,14 +627,7 @@ function checkOnlineStatus() {
     renderIcons();
 }
 
-function showSyncToast() {
-    const toast = document.getElementById('sync-toast');
-    if (toast && state.scriptUrl && state.scriptUrl.includes("spreadsheets")) toast.classList.remove('hidden');
-}
-function closeSyncToast() {
-    const toast = document.getElementById('sync-toast');
-    if (toast) toast.classList.add('hidden');
-}
+// Sync Toasts removed logic
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -898,10 +891,130 @@ function handleLogin(e) {
         state.user = user;
         navigate('dashboard');
         document.getElementById('login-error').classList.add('hidden');
+
+        // Trigger Auto-Sync in background without blocking
+        backgroundAutoSync();
     } else {
         const errEl = document.getElementById('login-error');
         errEl.classList.remove('hidden');
         errEl.innerText = 'Username atau Password Salah!';
+    }
+}
+
+async function backgroundAutoSync() {
+    if (!state.scriptUrl) return; // Skip if no cloud connected
+
+    const sheetId = getSheetIdFromUrl(state.scriptUrl);
+    if (!sheetId) return;
+
+    try {
+        let action = 'delta_pull';
+        let lastSyncStr = '';
+
+        // Determine if Auto-Recover (Full Pull) or Delta Sync
+        if (!state.patients || state.patients.length === 0) {
+            action = 'pull'; // Force full pull if local is completely empty (e.g. cache cleared)
+            showToast('Memulihkan data dari Cloud...', 'info');
+        } else {
+            // Find newest updatedAt
+            let maxTime = 0;
+
+            const checkTimes = (arr) => {
+                if (!arr) return;
+                arr.forEach(item => {
+                    if (item.updatedAt || item.updated_at) {
+                        const tText = String(item.updatedAt || item.updated_at).replace(" ", "T");
+                        const t = new Date(tText).getTime();
+                        if (t && t > maxTime) maxTime = t;
+                    }
+                });
+            };
+
+            checkTimes(state.patients);
+            checkTimes(state.assessments);
+            checkTimes(state.appointments);
+
+            if (maxTime > 0) {
+                // Formatting back to GAS compatible string
+                lastSyncStr = new Date(maxTime).toISOString();
+            } else {
+                action = 'pull'; // Fallback
+            }
+        }
+
+        const url = `${LICENSE_API_URL}?action=${action}&sheet_id=${sheetId}&last_sync=${lastSyncStr}&limit=2000&t=${Date.now()}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.patients && data.assessments) {
+            // MERGE LOGIC FOR DELTA SYNC OR OVERWRITE FOR PULL
+            if (action === 'pull') {
+                state.patients = data.patients;
+                state.assessments = sanitizeAssessments(data.assessments);
+                if (data.appointments) state.appointments = data.appointments;
+                if (data.expenses) state.expenses = data.expenses;
+                if (data.packages) state.packages = data.packages;
+            } else {
+                // Merge Data by ID
+                const mergeArr = (localArr, incomingArr) => {
+                    if (!incomingArr || incomingArr.length === 0) return localArr;
+                    incomingArr.forEach(inc => {
+                        const idx = localArr.findIndex(loc => loc.id === inc.id);
+                        if (idx !== -1) localArr[idx] = inc;
+                        else localArr.push(inc);
+                    });
+                    return localArr;
+                };
+
+                state.patients = mergeArr(state.patients || [], data.patients);
+                state.assessments = sanitizeAssessments(mergeArr(state.assessments || [], data.assessments));
+                if (data.appointments) state.appointments = mergeArr(state.appointments || [], data.appointments);
+                if (data.expenses) state.expenses = mergeArr(state.expenses || [], data.expenses);
+                if (data.packages) state.packages = mergeArr(state.packages || [], data.packages);
+            }
+
+            // Sync Config if available
+            if (data.config && Array.isArray(data.config)) {
+                data.config.forEach(c => {
+                    if (c.key === 'CLINIC_NAME') state.clinicInfo.name = c.value;
+                    if (c.key === 'CLINIC_SUBNAME') state.clinicInfo.subname = c.value;
+                    if (c.key === 'CLINIC_THERAPIST') state.clinicInfo.therapist = c.value;
+                    if (c.key === 'CLINIC_SIPF') state.clinicInfo.sipf = c.value;
+                    if (c.key === 'CLINIC_ADDRESS') state.clinicInfo.address = c.value;
+                    if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
+                    if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
+                    if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
+                    if (c.key === 'TELEGRAM_TOKEN') state.notificationConfig.telegramToken = c.value;
+                    if (c.key === 'TELEGRAM_CHAT_ID') state.notificationConfig.telegramChatId = c.value;
+                    if (c.key === 'EMAIL_RECEIVER') state.notificationConfig.targetEmail = c.value;
+                    if (c.key === 'EMAIL_SENDER') state.notificationConfig.senderEmail = c.value;
+                    if (c.key === 'MSG_CONFIRM_TEMPLATE') state.notificationConfig.msgConfirm = c.value;
+                    if (c.key === 'MSG_REJECT_TEMPLATE') state.notificationConfig.msgReject = c.value;
+                    if (c.key === 'MSG_REMINDER_TEMPLATE') state.notificationConfig.msgReminder = c.value;
+                });
+                localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
+                localStorage.setItem('erm_notif_config', JSON.stringify(state.notificationConfig));
+                applyBranding();
+            }
+
+            // Apply Hard Limit for Local Storage (Max 2000 per table)
+            const LOCAL_LIMIT = 2000;
+            if (state.patients.length > LOCAL_LIMIT) state.patients = state.patients.slice(-LOCAL_LIMIT);
+            if (state.assessments.length > LOCAL_LIMIT) state.assessments = state.assessments.slice(-LOCAL_LIMIT);
+            if (state.appointments.length > LOCAL_LIMIT) state.appointments = state.appointments.slice(-LOCAL_LIMIT);
+
+            saveData();
+
+            // Only show toast if something was actually pulled
+            if (action === 'pull' || (data.patients && data.patients.length > 0) || (data.assessments && data.assessments.length > 0)) {
+                showToast('Sync Selesai ✅', 'success');
+                // Re-render current view if needed
+                if (state.currentView !== 'login') renderApp();
+            }
+        }
+    } catch (error) {
+        console.error("Background Sync Failed:", error);
     }
 }
 
@@ -4220,7 +4333,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setTimeout(renderIcons, 100);
     setInterval(updateDate, 1000);
-    setTimeout(showSyncToast, 2000);
     updateDate();
     checkOnlineStatus();
 });

@@ -47,6 +47,53 @@ function getDataFromSheet(ss, sheetName) {
     });
 }
 
+function getDeltaDataFromSheet(ss, sheetName, lastSyncStr, limit) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return [];
+    const rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) return [];
+    
+    const headers = rows[0];
+    let dataRows = rows.slice(1);
+    
+    // 1. Filter by updatedAt > lastSyncStr
+    if (lastSyncStr) {
+        const updatedIdx = headers.findIndex(h => h === 'updatedAt' || h === 'updated_at');
+        if (updatedIdx !== -1) {
+            dataRows = dataRows.filter(row => {
+                let cellVal = row[updatedIdx];
+                if (!cellVal) return true;
+                
+                let cellTime;
+                if (cellVal instanceof Date) {
+                    cellTime = cellVal.getTime();
+                } else {
+                    cellTime = new Date(String(cellVal).replace(" ", "T")).getTime();
+                }
+                
+                let syncTime = new Date(lastSyncStr).getTime();
+                if (isNaN(cellTime) || isNaN(syncTime)) return true;
+                
+                return cellTime > syncTime;
+            });
+        }
+    } else if (limit && dataRows.length > limit) {
+        // 2. Fresh pull with limit -> slice from bottom (most recent)
+        dataRows = dataRows.slice(dataRows.length - limit);
+    }
+    
+    return dataRows.map(row => {
+        let obj = {};
+        headers.forEach((h, i) => {
+            let val = row[i];
+            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
+            if (h === 'time') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "HH:mm") : val;
+            obj[h] = val;
+        });
+        return obj;
+    });
+}
+
 function saveDataFixed(ss, name, data, headers) {
     let sheet = getOrInsertSheet(ss, name, headers);
     if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
