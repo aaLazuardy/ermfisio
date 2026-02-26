@@ -16,34 +16,6 @@
   background-color: #94a3b8;
 }
 
-/* --- VERTICAL PAPER HISTORY --- */
-.history-surface {
-  background: #0f172a;
-  /* Solid slate-900 */
-}
-
-.paper-report {
-  background: white;
-  color: #1e293b;
-  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.4);
-  transition: transform 0.3s ease;
-  width: 98%;
-  max-width: 1000px;
-  margin: 0 auto 50px auto;
-  border-radius: 8px;
-  position: relative;
-}
-
-.paper-report:hover {
-  transform: translateY(-5px);
-}
-
-.paper-report-dark-accent {
-  background: #f8fafc;
-  /* slate-50 */
-  border-top: 2px solid #e2e8f0;
-}
-
 /* --- CLEAN SURFACE STYLES --- */
 .history-card {
   background: #1e293b;
@@ -56,6 +28,11 @@
   background: #0f172a;
   /* Solid slate-900 */
   border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.history-surface {
+  background: #020617;
+  /* Solid slate-950 */
 }
 
 .custom-scroll::-webkit-scrollbar {
