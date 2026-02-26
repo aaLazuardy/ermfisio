@@ -2249,65 +2249,60 @@ function renderHistoryView(container) {
 
     container.innerHTML = `
         <div class="bg-slate-900 flex flex-col h-screen w-full overflow-hidden text-white relative">
-            <!-- Header Section (Full Page Style) -->
-            <div class="px-8 py-6 bg-slate-800 border-b border-white/5 flex justify-between items-center z-30 shrink-0 shadow-2xl">
-                <div class="flex items-center gap-6">
-                    <button onclick="navigate('assessments')" class="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10 group">
-                        <i data-lucide="arrow-left" class="text-slate-400 group-hover:text-white" width="24"></i>
+            <!-- Compact Header -->
+            <div class="px-6 py-4 bg-slate-800 border-b border-white/5 flex justify-between items-center z-30 shrink-0">
+                <div class="flex items-center gap-4">
+                    <button onclick="navigate('assessments')" class="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10 group">
+                        <i data-lucide="arrow-left" class="text-slate-400 group-hover:text-white" width="20"></i>
                     </button>
-                    <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/20">
-                            <i data-lucide="history" class="text-white" width="28"></i>
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                            <i data-lucide="history" class="text-white" width="20"></i>
                         </div>
                         <div>
-                            <h3 class="text-2xl font-black tracking-tight leading-none mb-1.5">${patient.name}</h3>
-                            <p class="text-xs font-bold text-white/30 uppercase tracking-[0.2em] flex items-center gap-2">
-                                <i data-lucide="shield-check" width="12"></i> FULL MEDICAL RECORD HISTORY • ${patientId}
-                            </p>
+                            <h3 class="text-lg font-black tracking-tight leading-none mb-1">${patient.name}</h3>
+                            <p class="text-[9px] font-bold text-white/30 uppercase tracking-[0.2em]">RM: ${patientId}</p>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Print All Button (Future enhancement candidate) -->
-                <button onclick="window.print()" class="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all">
-                    <i data-lucide="printer" width="14"></i> Print Full Page
+                <button onclick="window.print()" class="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all">
+                    <i data-lucide="printer" width="12"></i> Print
                 </button>
             </div>
 
-            <!-- Case Selector (Full Page Tabs) -->
-            <div class="px-8 py-5 bg-slate-800/50 border-b border-white/5 shrink-0 overflow-x-auto custom-scroll flex gap-4 z-20" id="case-selector">
+            <!-- Compact Case Pills -->
+            <div class="px-6 py-3 bg-slate-800/40 border-b border-white/5 shrink-0 overflow-x-auto custom-scroll flex gap-2 z-20" id="case-selector">
                 ${Object.keys(groups).map((key, idx) => `
-                    <button onclick="switchAssessmentCase('${key.replace(/'/g, "\\'")}')" class="case-tab ${state.activeGroupKey === key ? 'active' : ''}">
-                        <i data-lucide="${state.activeGroupKey === key ? 'folder-open' : 'folder'}" width="16"></i>
+                    <button onclick="switchAssessmentCase('${key.replace(/'/g, "\\'")}')" class="flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border ${state.activeGroupKey === key ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}">
+                        <i data-lucide="${state.activeGroupKey === key ? 'folder-open' : 'folder'}" width="12"></i>
                         <span>${key}</span>
-                        <span class="bg-black/20 px-2 py-1 rounded-lg text-[10px] font-black opacity-60">${groups[key].length}</span>
+                        <span class="opacity-60 ml-1">${groups[key].length}</span>
                     </button>
                 `).join('')}
             </div>
 
-            <!-- Slider Container (Full Width) -->
+            <!-- Slider Container -->
             <div class="flex-1 relative overflow-hidden bg-slate-950" id="slider-main-container">
                 <!-- Data will be rendered here by updateSliderUI -->
             </div>
 
-            <!-- Premium Footer (Full Page) -->
-            <div class="px-10 py-6 border-t border-white/5 bg-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] shrink-0 flex justify-between items-center z-30">
-                <div class="flex items-center gap-8">
-                    <div class="flex gap-3" id="slider-dots">
-                        <!-- Dots rendered here -->
-                    </div>
+            <!-- Compact Footer -->
+            <div class="px-6 py-4 border-t border-white/5 bg-slate-800 shrink-0 flex justify-between items-center z-30">
+                <div class="flex items-center gap-4" id="slider-dots">
+                    <!-- Dots rendered here -->
                 </div>
-                <div class="flex items-center gap-4">
-                    <button onclick="changeSlide(-1)" id="prev-btn" class="w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/20 active:scale-90">
-                        <i data-lucide="chevron-left" width="24"></i>
+                <div class="flex items-center gap-3">
+                    <button onclick="changeSlide(-1)" id="prev-btn" class="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all active:scale-90">
+                        <i data-lucide="chevron-left" width="18"></i>
                     </button>
-                    <div class="bg-black/20 px-6 py-3 rounded-2xl border border-white/5 text-sm font-black tracking-widest min-w-[100px] text-center">
+                    <div class="bg-black/20 px-4 py-2 rounded-xl border border-white/5 text-xs font-black tracking-widest min-w-[70px] text-center">
                         <span id="current-slide-num" class="text-blue-400">1</span>
-                        <span class="text-white/20 mx-2">/</span>
+                        <span class="text-white/20 mx-1">/</span>
                         <span id="total-slide-num">1</span>
                     </div>
-                    <button onclick="changeSlide(1)" id="next-btn" class="w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/20 active:scale-90">
-                        <i data-lucide="chevron-right" width="24"></i>
+                    <button onclick="changeSlide(1)" id="next-btn" class="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all active:scale-90">
+                        <i data-lucide="chevron-right" width="18"></i>
                     </button>
                 </div>
             </div>
@@ -2339,122 +2334,16 @@ function updateSliderUI() {
         dotsContainer.innerHTML = group.map((_, i) => `<div class="step-dot ${i === state.currentSliderIndex ? 'active' : ''}"></div>`).join('');
     }
 
-    // Content Rendering (Full Data PDF Style)
+    // Content Rendering (High Density Mode)
     container.innerHTML = `
-        <div class="h-full overflow-y-auto p-6 md:p-10 lg:p-14 custom-scroll fade-in" id="slide-content-scroll">
-            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-10 lg:gap-14">
+        <div class="h-full overflow-y-auto p-4 md:p-6 lg:p-8 custom-scroll fade-in" id="slide-content-scroll">
+            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8">
                 
-                <!-- Left Column: Primary Info & Body Chart (Sticky-ish on Desktop) -->
-                <div class="lg:w-[42%] space-y-8">
-                    <!-- Pertemuan Badge with improved spacing -->
-                    <div class="flex items-center gap-5 bg-blue-600/10 border border-blue-500/20 px-8 py-5 rounded-[2rem] shadow-xl shadow-blue-500/5 backdrop-blur-md">
+                <!-- Left Column: Vision & Primary Info (More compact) -->
+                <div class="lg:w-[38%] space-y-6">
+                    <!-- Compact Pertemuan Badge -->
+                    <div class="flex items-center gap-4 bg-blue-600/10 border border-blue-500/20 px-6 py-4 rounded-3xl shadow-lg backdrop-blur-md">
                         <div class="flex flex-col items-center">
-                            <span class="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Pertemuan</span>
-                            <span class="text-5xl font-black text-blue-500 leading-none">${state.currentSliderIndex + 1}</span>
-                        </div>
-                        <div class="w-px h-12 bg-white/10 mx-1"></div>
-                        <div class="text-left">
-                            <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-1">Pemeriksaan</p>
-                            <p class="text-lg font-bold text-white tracking-tight">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                        </div>
-                    </div>
-
-                    <!-- Diagnosis Card (Premium) -->
-                    <div class="bg-indigo-600/10 border border-indigo-400/20 rounded-[2.5rem] p-8 relative overflow-hidden group shadow-2xl">
-                        <div class="absolute -right-6 -top-6 opacity-[0.03] group-hover:scale-110 transition-transform duration-700">
-                            <i data-lucide="stethoscope" width="160"></i>
-                        </div>
-                        <h4 class="text-indigo-400/70 text-[10px] font-black uppercase tracking-[0.2em] mb-5 flex items-center gap-2"><i data-lucide="activity" width="14" stroke-width="3"></i> Medical Diagnosis</h4>
-                        <p class="text-3xl font-black text-white leading-[1.1] mb-6 tracking-tight">${a.diagnosis || '-'}</p>
-                        <div class="flex flex-wrap items-center gap-3">
-                           <span class="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-mono text-white/50">#${a.icd || 'N/A'}</span>
-                           <span class="bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-indigo-500/10">ICF: ${a.icf_codes || '-'}</span>
-                        </div>
-                    </div>
-
-                    <!-- Body Chart Section (Centered & Clear) -->
-                    <div class="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-8 flex flex-col items-center shadow-xl">
-                        <h4 class="w-full text-red-400/70 text-[10px] font-black uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i data-lucide="target" width="14" stroke-width="3"></i> Pain Distribution</h4>
-                        <div class="relative w-full max-w-[280px] bg-white rounded-3xl p-6 shadow-2xl shadow-black/50 overflow-hidden">
-                            <img src="${window.IMG_ASSETS.body_chart}" class="w-full h-auto object-contain mix-blend-multiply opacity-90 select-none pointer-events-none">
-                            <div class="absolute inset-0 p-6">
-                                ${(a.pain_points || []).map((pt, idx) => `
-                                    <div class="absolute w-7 h-7 -ml-3.5 -mt-3.5 bg-red-600 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-[10px] text-white font-black animate-pulse-short" style="left: ${pt.x}%; top: ${pt.y}%;">
-                                        ${idx + 1}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        
-                        <!-- VAS Scale (Compact & High Contrast) -->
-                        <div class="mt-8 w-full bg-slate-800/80 rounded-3xl p-6 border border-white/5 shadow-lg">
-                            <div class="flex justify-between items-end mb-4">
-                                <span class="text-[10px] font-black text-white/40 uppercase tracking-widest">VAS Score</span>
-                                <span class="text-4xl font-black text-red-500 leading-none">${a.vas || 0}<span class="text-sm text-white/20 font-normal">/10</span></span>
-                            </div>
-                            <div class="w-full h-3 bg-white/5 rounded-full overflow-hidden p-0.5">
-                                <div class="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 rounded-full shadow-lg shadow-red-500/20 transition-all duration-1000" style="width: ${(a.vas || 0) * 10}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Column: SOAPIER Details (More Spaced Out) -->
-                <div class="lg:w-[58%] space-y-10">
-                    <!-- Subjective Card -->
-                    <div class="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-8 shadow-xl">
-                        <h4 class="text-blue-400/80 text-[10px] font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><i data-lucide="message-square" width="16" stroke-width="3"></i> Subjective / Anamnesis</h4>
-                        <div class="text-base leading-relaxed text-white/80 whitespace-pre-line bg-black/20 p-6 rounded-[1.5rem] border border-white/5 break-words">
-                            ${a.custom_assessment || '<p class="text-white/20 italic">Tidak ada catatan subjektif.</p>'}
-                        </div>
-                    </div>
-
-                    <!-- Objective Data Cards -->
-                    <div class="grid grid-cols-3 gap-6">
-                        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
-                            <p class="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 opacity-60">Range of Motion</p>
-                            <p class="text-lg font-black text-white truncate px-1">${a.obj?.rom || '-'}</p>
-                        </div>
-                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
-                            <p class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 opacity-60">MMT Score</p>
-                            <p class="text-lg font-black text-white">${a.obj?.mmt || '-'}</p>
-                        </div>
-                        <div class="bg-purple-500/10 border border-purple-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
-                            <p class="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 opacity-60">Balance Test</p>
-                            <p class="text-lg font-black text-white truncate px-1">${a.obj?.balance || '-'}</p>
-                        </div>
-                    </div>
-
-                    <!-- ICF b & s Sections -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div class="bg-white/[0.02] rounded-[2rem] p-7 border border-white/5">
-                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-6 flex items-center gap-2"><i data-lucide="layers-3" width="14"></i> Body Functions (b)</h4>
-                            <div class="space-y-3">
-                                ${Array.isArray(a.b) && a.b.length ? a.b.map(item => `
-                                    <div class="bg-white/5 px-5 py-3 rounded-2xl border border-white/5 text-xs text-white/70 flex items-start gap-3 group">
-                                        <i data-lucide="check" width="12" class="mt-0.5 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                                        <span class="leading-tight">${item}</span>
-                                    </div>`).join('') : '<p class="text-xs italic text-white/10 ml-2">Empty</p>'}
-                            </div>
-                        </div>
-                        <div class="bg-white/[0.02] rounded-[2rem] p-7 border border-white/5">
-                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-6 flex items-center gap-2"><i data-lucide="box" width="14"></i> Body Structures (s)</h4>
-                            <div class="space-y-3">
-                                ${Array.isArray(a.s) && a.s.length ? a.s.map(item => `
-                                    <div class="bg-white/5 px-5 py-3 rounded-2xl border border-white/5 text-xs text-white/70 flex items-start gap-3 group">
-                                        <i data-lucide="check" width="12" class="mt-0.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                                        <span class="leading-tight">${item}</span>
-                                    </div>`).join('') : '<p class="text-xs italic text-white/10 ml-2">Empty</p>'}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Intervention & Plan (The Footer of the Slide) -->
-                    <div class="bg-gradient-to-br from-indigo-500/10 via-slate-800/40 to-slate-900 border border-indigo-400/20 rounded-[3rem] p-10 shadow-2xl">
-                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-10">
-                            <div class="space-y-6">
-                                <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><i data-lucide="zap" width="16" stroke-width="3"></i> Intervensi Fisioterapi</h4>
-                                <div class="flex flex-wrap gap-2.5">
                                     ${Array.isArray(a.intervention) && a.intervention.length ? a.intervention.map(i => `<span class="bg-indigo-500/20 text-indigo-200 px-4 py-2 rounded-2xl text-xs font-black border border-indigo-500/10 shadow-sm">${i}</span>`).join('') : '<span class="text-xs italic text-white/20">-</span>'}
                                 </div>
                             </div>
