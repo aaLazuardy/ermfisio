@@ -970,13 +970,19 @@ function renderApp() {
     const configBtn = document.getElementById('nav-config');
     if (configBtn) configBtn.classList.toggle('hidden', state.user.role !== 'ADMIN');
 
-    if (state.currentView === 'print') {
+    if (state.currentView === 'print' || state.currentView === 'history') {
         appLayout.classList.add('hidden');
         printContainer.classList.remove('hidden');
         printContainer.style.display = 'block';
         document.body.style.overflow = 'auto';
-        renderPrintView(printContainer);
-        _lastRenderedView = 'print';
+
+        if (state.currentView === 'print') {
+            renderPrintView(printContainer);
+            _lastRenderedView = 'print';
+        } else {
+            renderHistoryView(printContainer);
+            _lastRenderedView = 'history';
+        }
     } else {
         appLayout.classList.remove('hidden');
         printContainer.classList.add('hidden');
@@ -2227,65 +2233,88 @@ function renderAssessmentSlider(patientId) {
     state.assessmentGroups = groups;
     state.activeGroupKey = Object.keys(groups)[0];
     state.currentSliderIndex = 0;
+    state.historyPatientId = patientId;
 
-    const modalContent = document.getElementById('modal-content');
-    modalContent.innerHTML = `
-        <div class="bg-slate-900 flex flex-col h-[95vh] w-full max-w-5xl mx-auto rounded-3xl overflow-hidden shadow-2xl border border-white/5 text-white relative">
-            <!-- Header Section -->
-            <div class="px-8 py-5 bg-slate-800/50 border-b border-white/10 flex justify-between items-center z-30 shrink-0">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                        <i data-lucide="history" class="text-white" width="24"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-xl font-black tracking-tight leading-none mb-1">${patient.name}</h3>
-                        <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-1.5"><i data-lucide="hash" width="10"></i> ${patientId} • MEDICAL RECORD HISTORY</p>
+    navigate('history');
+}
+
+function renderHistoryView(container) {
+    const patientId = state.historyPatientId;
+    const patient = state.patients.find(p => p.id === patientId);
+    if (!patient) {
+        container.innerHTML = `<div class="p-10 text-center text-white">Pasien tidak ditemukan.</div>`;
+        return;
+    }
+    const groups = state.assessmentGroups;
+
+    container.innerHTML = `
+        <div class="bg-slate-900 flex flex-col h-screen w-full overflow-hidden text-white relative">
+            <!-- Header Section (Full Page Style) -->
+            <div class="px-8 py-6 bg-slate-800 border-b border-white/5 flex justify-between items-center z-30 shrink-0 shadow-2xl">
+                <div class="flex items-center gap-6">
+                    <button onclick="navigate('assessments')" class="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10 group">
+                        <i data-lucide="arrow-left" class="text-slate-400 group-hover:text-white" width="24"></i>
+                    </button>
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/20">
+                            <i data-lucide="history" class="text-white" width="28"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-black tracking-tight leading-none mb-1.5">${patient.name}</h3>
+                            <p class="text-xs font-bold text-white/30 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <i data-lucide="shield-check" width="12"></i> FULL MEDICAL RECORD HISTORY • ${patientId}
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all border border-white/5">
-                    <i data-lucide="x" width="22"></i>
+                
+                <!-- Print All Button (Future enhancement candidate) -->
+                <button onclick="window.print()" class="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all">
+                    <i data-lucide="printer" width="14"></i> Print Full Page
                 </button>
             </div>
 
-            <!-- Case Selector (Tabs) -->
-            <div class="px-8 py-4 bg-slate-800/30 border-b border-white/10 shrink-0 overflow-x-auto custom-scroll flex gap-3 z-20" id="case-selector">
+            <!-- Case Selector (Full Page Tabs) -->
+            <div class="px-8 py-5 bg-slate-800/50 border-b border-white/5 shrink-0 overflow-x-auto custom-scroll flex gap-4 z-20" id="case-selector">
                 ${Object.keys(groups).map((key, idx) => `
                     <button onclick="switchAssessmentCase('${key.replace(/'/g, "\\'")}')" class="case-tab ${state.activeGroupKey === key ? 'active' : ''}">
-                        <i data-lucide="folder-heart" width="14"></i>
+                        <i data-lucide="${state.activeGroupKey === key ? 'folder-open' : 'folder'}" width="16"></i>
                         <span>${key}</span>
-                        <span class="bg-white/10 px-1.5 py-0.5 rounded-md text-[9px] font-black">${groups[key].length}</span>
+                        <span class="bg-black/20 px-2 py-1 rounded-lg text-[10px] font-black opacity-60">${groups[key].length}</span>
                     </button>
                 `).join('')}
             </div>
 
-            <!-- Slider Container -->
-            <div class="flex-1 relative overflow-hidden bg-slate-950/20" id="slider-main-container">
+            <!-- Slider Container (Full Width) -->
+            <div class="flex-1 relative overflow-hidden bg-slate-950" id="slider-main-container">
                 <!-- Data will be rendered here by updateSliderUI -->
             </div>
 
-            <!-- Premium Footer -->
-            <div class="px-8 py-5 border-t border-white/10 bg-slate-900 shrink-0 flex justify-between items-center z-30">
-                <div class="flex items-center gap-6">
-                    <div class="flex gap-2" id="slider-dots">
+            <!-- Premium Footer (Full Page) -->
+            <div class="px-10 py-6 border-t border-white/5 bg-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] shrink-0 flex justify-between items-center z-30">
+                <div class="flex items-center gap-8">
+                    <div class="flex gap-3" id="slider-dots">
                         <!-- Dots rendered here -->
                     </div>
                 </div>
-                <div class="flex items-center gap-3">
-                    <button onclick="changeSlide(-1)" id="prev-btn" class="nav-btn">
-                        <i data-lucide="arrow-left" width="18"></i>
+                <div class="flex items-center gap-4">
+                    <button onclick="changeSlide(-1)" id="prev-btn" class="w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/20 active:scale-90">
+                        <i data-lucide="chevron-left" width="24"></i>
                     </button>
-                    <div class="bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-xs font-black min-w-[70px] text-center">
-                        <span id="current-slide-num">1</span> <span class="text-white/30 mx-1">/</span> <span id="total-slide-num">1</span>
+                    <div class="bg-black/20 px-6 py-3 rounded-2xl border border-white/5 text-sm font-black tracking-widest min-w-[100px] text-center">
+                        <span id="current-slide-num" class="text-blue-400">1</span>
+                        <span class="text-white/20 mx-2">/</span>
+                        <span id="total-slide-num">1</span>
                     </div>
-                    <button onclick="changeSlide(1)" id="next-btn" class="nav-btn">
-                        <i data-lucide="arrow-right" width="18"></i>
+                    <button onclick="changeSlide(1)" id="next-btn" class="w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/20 active:scale-90">
+                        <i data-lucide="chevron-right" width="24"></i>
                     </button>
                 </div>
             </div>
         </div>
     `;
 
-    document.getElementById('modal-container').classList.remove('hidden');
+    renderIcons();
     updateSliderUI();
 }
 
@@ -2293,15 +2322,8 @@ function switchAssessmentCase(key) {
     state.activeGroupKey = key;
     state.currentSliderIndex = 0;
 
-    // Update active tab UI
-    const tabs = document.querySelectorAll('.case-tab');
-    tabs.forEach(t => {
-        const span = t.querySelector('span');
-        if (span && span.innerText === key) t.classList.add('active');
-        else t.classList.remove('active');
-    });
-
-    updateSliderUI();
+    // Refresh Case Selector UI
+    renderHistoryView(document.getElementById('print-container'));
 }
 
 function updateSliderUI() {
