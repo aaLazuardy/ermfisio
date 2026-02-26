@@ -970,19 +970,13 @@ function renderApp() {
     const configBtn = document.getElementById('nav-config');
     if (configBtn) configBtn.classList.toggle('hidden', state.user.role !== 'ADMIN');
 
-    if (state.currentView === 'print' || state.currentView === 'history') {
+    if (state.currentView === 'print') {
         appLayout.classList.add('hidden');
         printContainer.classList.remove('hidden');
         printContainer.style.display = 'block';
         document.body.style.overflow = 'auto';
-
-        if (state.currentView === 'print') {
-            renderPrintView(printContainer);
-            _lastRenderedView = 'print';
-        } else {
-            renderHistoryView(printContainer);
-            _lastRenderedView = 'history';
-        }
+        renderPrintView(printContainer);
+        _lastRenderedView = 'print';
     } else {
         appLayout.classList.remove('hidden');
         printContainer.classList.add('hidden');
@@ -1506,7 +1500,6 @@ function renderAssessmentList(container) {
         <div class="space-y-4 fade-in pb-24"> <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-3">
             <div><h3 class="font-bold text-lg text-slate-800 leading-tight">${headerText}</h3><p class="text-xs text-slate-500">Total: ${filteredAssessments.length} data</p></div>
             <div class="flex gap-2">
-                ${state.filterPatientId ? `<button onclick="renderAssessmentSlider('${state.filterPatientId}')" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-lg animate-bounce-short"><i data-lucide="presentation" width="14"></i> Slide Riwayat</button>` : ''}
                 ${state.filterPatientId ? `<button onclick="state.filterPatientId=null; renderAssessmentList(document.getElementById('main-content'))" class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 flex items-center gap-2"><i data-lucide="x" width="14"></i> Reset Filter</button>` : ''}
                 <button id="btn-print-multi" onclick="printSelected()" class="hidden bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-slate-700 animate-bounce-short"><i data-lucide="printer" width="14"></i> Cetak (<span id="sel-count">0</span>)</button>
             </div>
@@ -1522,7 +1515,7 @@ function renderAssessmentList(container) {
         const p = state.patients.find(pt => pt.id === a.patientId);
         return `<tr class="hover:bg-blue-50 transition-colors">
                                 <td class="p-4 text-center"><input type="checkbox" class="sel-check accent-blue-600 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></td>
-                                <td class="p-4 font-mono text-xs text-slate-500">${formatDateForDisplay(a.date)}</td>
+                                <td class="p-4 font-mono text-xs text-slate-500">${formatDate(a.date)}</td>
                                 <td class="p-4 font-bold text-slate-800">${p ? p.name : '?'}</td>
                                 <td class="p-4"><span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs border border-blue-200 font-medium">${a.diagnosis}</span></td>
                                 <td class="p-4 flex justify-center gap-2">
@@ -1541,7 +1534,7 @@ function renderAssessmentList(container) {
         return `<div class="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
                         <div class="pt-1"><input type="checkbox" class="sel-check w-5 h-5 accent-blue-600 rounded border-slate-300 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></div>
                         <div class="flex-1">
-                            <div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-800 text-sm line-clamp-1">${p ? p.name : '?'}</h4><span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${formatDateForDisplay(a.date)}</span></div>
+                            <div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-800 text-sm line-clamp-1">${p ? p.name : '?'}</h4><span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${formatDate(a.date)}</span></div>
                             <div class="mb-3"><span class="inline-block bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] border border-blue-100 font-bold mb-1">${a.diagnosis}</span></div>
                             <div class="flex gap-2">
                                 <button onclick="viewSinglePrint('${a.id}')" class="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-100 flex justify-center items-center gap-1"><i data-lucide="eye" width="14"></i> Lihat</button>
@@ -2148,12 +2141,14 @@ function goToFormManual() { window.tempFormData.diagnosis = ''; showStep2(); }
 function showStep1() { document.getElementById('step-1').classList.remove('hidden'); document.getElementById('step-2').classList.add('hidden'); }
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
 function updateICFSelectionUI() {
+    // Granular update: only rebuild the filter pills and template grid.
+    // Does NOT touch Step-2 (form data area) at all, preventing full flicker.
     const container = document.getElementById('icf-selection-container');
     if (!container) {
+        // Fallback: full re-render if container not found yet
         renderAssessmentForm(document.getElementById('main-content'), true);
         return;
     }
-
     // Rebuild region pills
     const regions = ['Semua'];
     Object.keys(ICF_TEMPLATES).forEach(t => {
@@ -2188,7 +2183,6 @@ function updateICFSelectionUI() {
     renderIcons();
 }
 
-
 function setTemplateCategory(cat) {
     currentTemplateCategory = cat;
     currentTemplateRegion = 'Semua';
@@ -2204,307 +2198,8 @@ function handleTemplateSearch(query) {
     if (grid) {
         grid.innerHTML = renderTemplateGrid();
         renderIcons();
-    }
-}
-
-// --- 11. ASSESSMENT SLIDER / HISTORY UI ---
-function renderAssessmentSlider(patientId) {
-    const patient = state.patients.find(p => p.id === patientId);
-    if (!patient) return;
-
-    // 1. Grouping Logic: Group assessments by Diagnosis
-    const allAssessments = state.assessments
-        .filter(a => a.patientId === patientId)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    if (allAssessments.length === 0) {
-        showToast('Belum ada data riwayat untuk pasien ini.', 'error');
-        return;
-    }
-
-    // Create Groups (Cases)
-    const groups = {};
-    allAssessments.forEach(a => {
-        const diag = a.diagnosis || 'Tanpa Diagnosa';
-        if (!groups[diag]) groups[diag] = [];
-        groups[diag].push(a);
-    });
-
-    state.assessmentGroups = groups;
-    state.activeGroupKey = Object.keys(groups)[0];
-    state.currentSliderIndex = 0;
-    state.historyPatientId = patientId;
-
-    navigate('history');
-}
-
-function renderHistoryView(container) {
-    const patientId = state.historyPatientId;
-    const patient = state.patients.find(p => p.id === patientId);
-    if (!patient) {
-        container.innerHTML = `<div class="p-10 text-center text-white">Pasien tidak ditemukan.</div>`;
-        return;
-    }
-    const groups = state.assessmentGroups;
-
-    container.innerHTML = `
-        <div class="bg-slate-950 flex flex-col h-screen w-full overflow-hidden text-white relative history-surface" id="history-full-view">
-            
-            <!-- Floating Header -->
-            <div id="sticky-header" class="fixed top-0 left-0 right-0 px-8 py-5 bg-slate-900 border-b border-white/5 flex flex-col gap-4 z-[100] shadow-2xl">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-6">
-                        <button onclick="navigate('assessments')" class="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10 group">
-                            <i data-lucide="arrow-left" class="text-slate-400 group-hover:text-white" width="24"></i>
-                        </button>
-                        <div class="flex items-center gap-4">
-                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-xl">
-                                <i data-lucide="history" class="text-white" width="28"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-2xl font-black tracking-tight leading-none mb-1.5">${patient.name}</h3>
-                                <p class="text-xs font-bold text-white/30 uppercase tracking-[0.2em] flex items-center gap-2">
-                                    MEDICAL RECORD ID • ${patientId}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <button onclick="window.print()" class="px-8 py-4 bg-white/5 hover:bg-blue-600 rounded-2xl border border-white/10 text-xs font-black uppercase tracking-widest flex items-center gap-3 transition-all">
-                        <i data-lucide="printer" width="16"></i> Print Report
-                    </button>
-                </div>
-
-                <!-- Compact Case Selection -->
-                <div class="flex gap-3 overflow-x-auto custom-scroll pb-1" id="case-selector">
-                    ${Object.keys(groups).map((key, idx) => `
-                        <button onclick="switchAssessmentCase('${key.replace(/'/g, "\\'")}')" class="flex items-center gap-3 px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${state.activeGroupKey === key ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-white/5 text-white/40 hover:bg-slate-700'}">
-                            <i data-lucide="${state.activeGroupKey === key ? 'folder-open' : 'folder'}" width="14"></i>
-                            <span>${key}</span>
-                            <span class="bg-black/20 px-2 py-0.5 rounded-md text-[10px] font-black opacity-60">${groups[key].length}</span>
-                        </button>
-                    `).join('')}
-                </div>
-            </div>
-
-            <!-- Slider Main (Takes Full Screen) -->
-            <div class="flex-1 relative overflow-hidden h-full" id="slider-main-container">
-            </div>
-
-            <!-- Floating Footer -->
-            <div id="sticky-footer" class="fixed bottom-0 left-0 right-0 px-10 py-6 border-t border-white/5 bg-slate-900 shadow-2xl z-[100] shrink-0 flex justify-between items-center">
-                <div class="flex items-center gap-8">
-                    <div class="flex gap-4" id="slider-dots">
-                    </div>
-                </div>
-                <div class="flex items-center gap-6">
-                    <button onclick="changeSlide(-1)" id="prev-btn" class="w-16 h-16 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center hover:bg-blue-600 transition-all active:scale-95 shadow-lg group">
-                        <i data-lucide="chevron-left" class="text-white/40 group-hover:text-white" width="28"></i>
-                    </button>
-                    <div class="bg-black/30 px-8 py-4 rounded-[2rem] border border-white/5 text-lg font-black tracking-widest min-w-[120px] text-center shadow-inner">
-                        <span id="current-slide-num" class="text-blue-500">1</span>
-                        <span class="text-white/10 mx-3">/</span>
-                        <span id="total-slide-num" class="text-white/40">1</span>
-                    </div>
-                    <button onclick="changeSlide(1)" id="next-btn" class="w-16 h-16 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center hover:bg-blue-600 transition-all active:scale-95 shadow-lg group">
-                        <i data-lucide="chevron-right" class="text-white/40 group-hover:text-white" width="28"></i>
-                    </button>
-                </div>
-            </div>
-
-        </div>
-    `;
-
-    renderIcons();
-    updateSliderUI();
-}
-
-function switchAssessmentCase(key) {
-    state.activeGroupKey = key;
-    state.currentSliderIndex = 0;
-
-    // Refresh Case Selector UI
-    renderHistoryView(document.getElementById('print-container'));
-}
-
-function updateSliderUI() {
-    const container = document.getElementById('slider-main-container');
-    const group = state.assessmentGroups[state.activeGroupKey];
-    const a = group[state.currentSliderIndex];
-
-    if (!container || !a) return;
-
-    // Render dots
-    const dotsContainer = document.getElementById('slider-dots');
-    if (dotsContainer) {
-        dotsContainer.innerHTML = group.map((_, i) => `<div class="w-3 h-3 rounded-full transition-all duration-300 ${i === state.currentSliderIndex ? 'bg-blue-500 w-8' : 'bg-white/10'}"></div>`).join('');
-    }
-
-    // Content Rendering (Premium Solid Mode)
-    container.innerHTML = `
-        <div class="h-full overflow-y-auto p-10 md:p-14 lg:p-20 custom-scroll fade-in scroll-smooth pt-32 pb-32" id="slide-content-scroll">
-            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-16 lg:gap-24">
-                
-                <!-- Left Column: Primary Visuals -->
-                <div class="lg:w-[42%] space-y-12">
-                    <!-- Large Pertemuan Badge -->
-                    <div class="flex items-center gap-8 history-card border-none px-10 py-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
-                        <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-125 transition-transform duration-1000">
-                             <i data-lucide="layers" width="120"></i>
-                        </div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-blue-500 text-xs font-black uppercase tracking-[0.3em] mb-2">Sesi Ke</span>
-                            <span class="text-7xl font-black text-white leading-none">${state.currentSliderIndex + 1}</span>
-                        </div>
-                        <div class="w-px h-16 bg-white/10 mx-2"></div>
-                        <div class="text-left">
-                            <p class="text-white/30 text-[11px] font-black uppercase tracking-[0.2em] mb-1">Tanggal Pemeriksaan</p>
-                            <p class="text-3xl font-bold text-white tracking-tight leading-tight">${formatDateForDisplay(a.date)}</p>
-                        </div>
-                    </div>
-
-                    <!-- Diagnosis Section (Solid Card) -->
-                    <div class="history-card p-12 rounded-[4rem] space-y-6 relative group overflow-hidden">
-                        <div class="flex items-center gap-3 text-blue-500 font-black text-sm uppercase tracking-widest">
-                            <i data-lucide="stethoscope" width="20"></i>
-                            <span>Diagnosa Fisioterapi</span>
-                        </div>
-                        <h2 class="text-5xl font-black leading-[1.1] text-white tracking-tighter">${a.diagnosis}</h2>
-                        <div class="flex items-center gap-4 pt-4 border-t border-white/5">
-                            <div class="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-2xl text-[13px] font-black border border-blue-500/20 uppercase">
-                                ICD-10: ${a.icd10 || 'N/A'}
-                            </div>
-                            <div class="text-white/30 text-xs font-bold">
-                                ${(a.icf_codes || '').split(',').map(c => ` #${c.trim()}`).join('')}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Body Chart Scaling -->
-                    <div class="history-card p-12 rounded-[4rem] flex flex-col items-center relative group">
-                        <div class="absolute top-10 left-12 flex items-center gap-3 text-white/10 uppercase font-black tracking-widest text-[11px]">
-                            <i data-lucide="navigation" width="16"></i>
-                            <span>Pain Points Map</span>
-                        </div>
-                        <div class="relative w-[320px] h-[400px] bg-white rounded-[3.5rem] p-8 shadow-2xl transition-all duration-700 group-hover:translate-y-[-10px]">
-                            <img src="https://raw.githubusercontent.com/aaLazuardy/ermfisio/main/assets/body-chart.png" class="w-full h-full object-contain" alt="Body Chart">
-                            ${(a.pain_points || []).map((pt, idx) => `
-                                <div class="absolute w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center text-[11px] font-black shadow-[0_0_20px_rgba(220,38,38,0.5)] border-2 border-white animate-pulse-short" 
-                                     style="left: ${pt.x}%; top: ${pt.y}%; translate: -50% -50%;">
-                                    ${idx + 1}
-                                </div>
-                            `).join('')}
-                        </div>
-                        <!-- VAS Scale (Solid Look) -->
-                        <div class="mt-12 w-full history-card-accent p-8 rounded-[2.5rem] shadow-xl">
-                            <div class="flex justify-between items-end mb-5">
-                                <span class="text-xs font-black text-white/40 uppercase tracking-widest">Pain Intensity (VAS)</span>
-                                <span class="text-6xl font-black text-red-500 leading-none">${a.pain_vas}<span class="text-xl text-white/20 font-medium">/10</span></span>
-                            </div>
-                            <div class="w-full h-3 bg-black/40 rounded-full overflow-hidden p-0.5">
-                                <div class="h-full bg-gradient-to-r from-green-500 via-orange-500 to-red-600 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all duration-1000" style="width: ${a.pain_vas * 10}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Column: SOAPIER Data -->
-                <div class="lg:w-[58%] space-y-12">
-                    <!-- Subjective Card (Clean & Large) -->
-                    <div class="history-card p-12 rounded-[4rem] relative group border-l-8 border-l-blue-600">
-                        <div class="flex items-center gap-4 text-blue-500 mb-8 font-black uppercase tracking-[0.2em] text-sm">
-                            <i data-lucide="message-square" width="24"></i>
-                            <span>Anamnesis & Keluhan</span>
-                        </div>
-                        <div class="bg-black/40 p-10 rounded-[2.5rem] shadow-inner">
-                            <p class="text-2xl text-slate-200 leading-relaxed font-medium italic break-words transition-colors group-hover:text-white">"${a.subjective || 'Tidak ada catatan subjektif.'}"</p>
-                        </div>
-                    </div>
-
-                    <!-- Objective Grid (Large Cards) -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                         <div class="history-card p-8 rounded-[3rem] text-center transform hover:translate-y-[-5px] transition-all">
-                            <i data-lucide="move" width="24" class="mx-auto mb-4 text-emerald-400"></i>
-                            <span class="text-[11px] font-black uppercase text-emerald-400/60 tracking-[0.2em] mb-3 block">ROM</span>
-                            <span class="text-3xl font-black text-white underline decoration-emerald-500/30 decoration-4 underline-offset-8">${a.objective_rom || '-'}</span>
-                         </div>
-                         <div class="history-card p-8 rounded-[3rem] text-center transform hover:translate-y-[-5px] transition-all">
-                            <i data-lucide="gauge" width="24" class="mx-auto mb-4 text-blue-400"></i>
-                            <span class="text-[11px] font-black uppercase text-blue-400/60 tracking-[0.2em] mb-3 block">MMT</span>
-                            <span class="text-3xl font-black text-white underline decoration-blue-500/30 decoration-4 underline-offset-8">${a.objective_mmt || '-'}</span>
-                         </div>
-                         <div class="history-card p-8 rounded-[3rem] text-center transform hover:translate-y-[-5px] transition-all">
-                            <i data-lucide="activity" width="24" class="mx-auto mb-4 text-purple-400"></i>
-                            <span class="text-[11px] font-black uppercase text-purple-400/60 tracking-[0.2em] mb-3 block">Balance</span>
-                            <span class="text-3xl font-black text-white underline decoration-purple-500/30 decoration-4 underline-offset-8">${a.objective_balance || '-'}</span>
-                         </div>
-                    </div>
-
-                    <!-- ICF (Clean Matrix) -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div class="history-card p-10 rounded-[3rem] border-t-4 border-t-indigo-600/20">
-                            <span class="text-[11px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-6 flex items-center gap-2">
-                                <i data-lucide="layers" width="16"></i> Body Function (b)
-                            </span>
-                            <div class="text-slate-300 text-lg leading-relaxed font-medium bg-black/20 p-6 rounded-2xl">${a.icf_b || '-'}</div>
-                        </div>
-                        <div class="history-card p-10 rounded-[3rem] border-t-4 border-t-indigo-600/20">
-                            <span class="text-[11px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-6 flex items-center gap-2">
-                                <i data-lucide="box" width="16"></i> Body Structure (s)
-                            </span>
-                            <div class="text-slate-300 text-lg leading-relaxed font-medium bg-black/20 p-6 rounded-2xl">${a.icf_s || '-'}</div>
-                        </div>
-                    </div>
-
-                    <!-- Intervention & Evolution (Solid & Powerfull) -->
-                    <div class="space-y-8">
-                        <div class="bg-gradient-to-r from-blue-700 to-indigo-800 p-12 rounded-[4rem] shadow-[0_20px_60px_rgba(37,99,235,0.2)]">
-                            <div class="flex items-center gap-4 text-white/50 mb-8 font-black uppercase tracking-[0.3em] text-sm">
-                                <i data-lucide="zap" width="24" class="text-yellow-400"></i>
-                                <span>Rencana Intervensi</span>
-                            </div>
-                            <p class="text-2xl text-white font-black leading-tight tracking-tight">${a.intervention || '-'}</p>
-                        </div>
-                        <div class="history-card-accent p-12 rounded-[4rem] border-dashed border-2 border-white/5">
-                            <div class="flex items-center gap-4 text-slate-500 mb-8 font-black uppercase tracking-[0.3em] text-sm">
-                                <i data-lucide="clipboard-list" width="24"></i>
-                                <span>Evaluasi & Tindak Lanjut</span>
-                            </div>
-                            <p class="text-2xl text-slate-200 font-bold leading-relaxed">${a.plan || '-'}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    lucide.createIcons();
-
-    // Update Counter
-    document.getElementById('current-slide-num').innerText = state.currentSliderIndex + 1;
-    document.getElementById('total-slide-num').innerText = group.length;
-
-    // Update Nav Buttons
-    const prevBtn = document.getElementById('prev-btn');
-    const nextBtn = document.getElementById('next-btn');
-
-    if (prevBtn) {
-        prevBtn.style.opacity = state.currentSliderIndex === 0 ? '0.2' : '1';
-        prevBtn.style.pointerEvents = state.currentSliderIndex === 0 ? 'none' : 'auto';
-    }
-    if (nextBtn) {
-        nextBtn.style.opacity = state.currentSliderIndex === group.length - 1 ? '0.2' : '1';
-        nextBtn.style.pointerEvents = state.currentSliderIndex === group.length - 1 ? 'none' : 'auto';
-    }
-}
-
-function changeSlide(dir) {
-    const group = state.assessmentGroups[state.activeGroupKey];
-    if (!group) return;
-
-    const newIdx = state.currentSliderIndex + dir;
-    if (newIdx >= 0 && newIdx < group.length) {
-        state.currentSliderIndex = newIdx;
-        updateSliderUI();
+    } else {
+        renderAssessmentForm(document.getElementById('main-content'), true);
     }
 }
 
@@ -2584,7 +2279,7 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
                     <div id="clinical-guidance-box" class="hidden"></div>
 
                     ${!apptId ? `
-                    <!-- Opsi Layanan & Paket (Otomasi Jadwal) -->
+                    <!-- Opsi Layanan \u0026 Paket (Otomasi Jadwal) -->
                     <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
                         <div class="flex items-center gap-2 mb-1">
                             <i data-lucide="zap" width="14" class="text-blue-600"></i>
