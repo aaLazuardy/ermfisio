@@ -2202,169 +2202,270 @@ function handleTemplateSearch(query) {
 }
 
 // --- 11. ASSESSMENT SLIDER / HISTORY UI ---
-function renderAssessmentSlider(patientId, startIndex = 0) {
+function renderAssessmentSlider(patientId) {
     const patient = state.patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    // Filter & Sort: Oldest to Newest (Pertemuan 1, 2, 3...)
-    const assessments = state.assessments
+    // 1. Grouping Logic: Group assessments by Diagnosis
+    const allAssessments = state.assessments
         .filter(a => a.patientId === patientId)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    if (assessments.length === 0) {
+    if (allAssessments.length === 0) {
         showToast('Belum ada data riwayat untuk pasien ini.', 'error');
         return;
     }
 
+    // Create Groups (Cases)
+    const groups = {};
+    allAssessments.forEach(a => {
+        const diag = a.diagnosis || 'Tanpa Diagnosa';
+        if (!groups[diag]) groups[diag] = [];
+        groups[diag].push(a);
+    });
+
+    state.assessmentGroups = groups;
+    state.activeGroupKey = Object.keys(groups)[0];
+    state.currentSliderIndex = 0;
+
     const modalContent = document.getElementById('modal-content');
     modalContent.innerHTML = `
-        <div class="bg-slate-900/95 backdrop-blur-xl flex flex-col h-[90vh] w-full max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-2xl border border-white/10 text-white relative">
-            <!-- Header -->
-            <div class="px-8 py-6 border-b border-white/10 flex justify-between items-center z-10 shrink-0">
-                <div>
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Assessment History</span>
-                        <span class="text-white/40 text-xs font-mono">${patientId}</span>
+        <div class="bg-slate-900 flex flex-col h-[95vh] w-full max-w-5xl mx-auto rounded-3xl overflow-hidden shadow-2xl border border-white/5 text-white relative">
+            <!-- Header Section -->
+            <div class="px-8 py-5 bg-slate-800/50 border-b border-white/10 flex justify-between items-center z-30 shrink-0">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <i data-lucide="history" class="text-white" width="24"></i>
                     </div>
-                    <h3 class="text-xl font-black">${patient.name}</h3>
+                    <div>
+                        <h3 class="text-xl font-black tracking-tight leading-none mb-1">${patient.name}</h3>
+                        <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-1.5"><i data-lucide="hash" width="10"></i> ${patientId} • MEDICAL RECORD HISTORY</p>
+                    </div>
                 </div>
-                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full transition-all">
-                    <i data-lucide="x" width="20"></i>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-red-500/20 hover:text-red-400 rounded-xl transition-all border border-white/5">
+                    <i data-lucide="x" width="22"></i>
                 </button>
             </div>
 
-            <!-- Slider Body -->
-            <div class="flex-1 slide-container relative">
-                <div class="slide-wrapper h-full" id="assessment-slide-wrapper">
-                    ${assessments.map((a, idx) => `
-                        <div class="slide-item h-full flex flex-col p-6 md:p-10 overflow-y-auto custom-scroll">
-                            <div class="glass-card p-6 md:p-8 rounded-3xl border border-white/20 shadow-xl mb-6 relative overflow-hidden group">
-                                <div class="absolute top-0 right-0 p-8 opacity-5 -mr-4 -mt-4 transition-transform group-hover:scale-110">
-                                    <i data-lucide="activity" width="120" stroke-width="4"></i>
-                                </div>
-                                
-                                <div class="flex justify-between items-start mb-8 border-b border-white/10 pb-6">
-                                    <div class="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-2xl border border-blue-500/30 flex flex-col">
-                                        <span class="text-[10px] uppercase font-black tracking-widest leading-none mb-1">Pertemuan</span>
-                                        <span class="text-3xl font-black leading-none">${idx + 1}</span>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-1">Tanggal Pemeriksaan</p>
-                                        <p class="text-xl font-bold">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div class="space-y-6">
-                                        <div>
-                                            <p class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="stethoscope" width="12"></i> Diagnosa Medis</p>
-                                            <p class="text-lg font-bold">${a.diagnosis || '-'}</p>
-                                            <p class="text-xs text-white/40 font-mono mt-1">ICD-10: ${a.icd || '-'}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="message-square" width="12"></i> Anamnesis / Keluhan</p>
-                                            <p class="text-sm leading-relaxed text-white/80 whitespace-pre-line">${a.custom_assessment || '-'}</p>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-6">
-                                        <div class="bg-white/5 p-4 rounded-2xl border border-white/10">
-                                            <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-3">Objektif Data</p>
-                                            <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-4">
-                                                <span class="text-xs">VAS Nyeri</span>
-                                                <span class="text-2xl font-black text-red-500">${a.vas || 0}/10</span>
-                                            </div>
-                                            <div class="grid grid-cols-3 gap-2 text-center">
-                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">ROM</p><p class="text-xs font-bold truncate">${a.obj?.rom || '-'}</p></div>
-                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">MMT</p><p class="text-xs font-bold">${a.obj?.mmt || '-'}</p></div>
-                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">Balance</p><p class="text-xs font-bold truncate">${a.obj?.balance || '-'}</p></div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p class="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="check-circle" width="12"></i> Evaluasi Klinis</p>
-                                            <div class="space-y-1">
-                                                ${(Array.isArray(a.eval) ? a.eval : []).map(ev => `<div class="flex items-start gap-2 text-sm text-white/70 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10"><i data-lucide="check" width="14" class="text-emerald-500 shrink-0 mt-0.5"></i> <span>${ev}</span></div>`).join('') || '<p class="text-xs italic text-white/20">- Belum ada evaluasi -</p>'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mt-8 pt-6 border-t border-white/10">
-                                    <p class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2"><i data-lucide="zap" width="12"></i> Intervensi Diberikan</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        ${(Array.isArray(a.intervention) ? a.intervention : []).map(i => `<span class="bg-indigo-500/10 text-indigo-300 px-3 py-1 rounded-full text-xs border border-indigo-500/20 font-bold">${i}</span>`).join('') || '-'}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <!-- Navigation Controls -->
-                <button onclick="changeSlide(-1)" id="prev-btn" class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/20 border border-white/10 rounded-full transition-all text-white/50 hover:text-white z-20 group">
-                    <i data-lucide="chevron-left" width="24" class="group-hover:-translate-x-1 transition-transform"></i>
-                </button>
-                <button onclick="changeSlide(1)" id="next-btn" class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/20 border border-white/10 rounded-full transition-all text-white/50 hover:text-white z-20 group">
-                    <i data-lucide="chevron-right" width="24" class="group-hover:translate-x-1 transition-transform"></i>
-                </button>
+            <!-- Case Selector (Tabs) -->
+            <div class="px-8 py-4 bg-slate-800/30 border-b border-white/10 shrink-0 overflow-x-auto custom-scroll flex gap-3 z-20" id="case-selector">
+                ${Object.keys(groups).map((key, idx) => `
+                    <button onclick="switchAssessmentCase('${key.replace(/'/g, "\\'")}')" class="case-tab ${state.activeGroupKey === key ? 'active' : ''}">
+                        <i data-lucide="folder-heart" width="14"></i>
+                        <span>${key}</span>
+                        <span class="bg-white/10 px-1.5 py-0.5 rounded-md text-[9px] font-black">${groups[key].length}</span>
+                    </button>
+                `).join('')}
             </div>
 
-            <!-- Footer Dots -->
-            <div class="px-8 py-6 border-t border-white/10 bg-black/20 shrink-0">
-                <div class="step-indicator" id="slider-dots">
-                    ${assessments.map((_, i) => `<div class="step-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
+            <!-- Slider Container -->
+            <div class="flex-1 relative overflow-hidden bg-slate-950/20" id="slider-main-container">
+                <!-- Data will be rendered here by updateSliderUI -->
+            </div>
+
+            <!-- Premium Footer -->
+            <div class="px-8 py-5 border-t border-white/10 bg-slate-900 shrink-0 flex justify-between items-center z-30">
+                <div class="flex items-center gap-6">
+                    <div class="flex gap-2" id="slider-dots">
+                        <!-- Dots rendered here -->
+                    </div>
                 </div>
-                <div class="flex justify-between items-center mt-4">
-                    <p class="text-[10px] font-black text-white/30 uppercase tracking-widest">Gunakan panah atau swipe untuk navigasi</p>
-                    <div class="text-xs font-bold text-white/60"><span id="current-slide-num">1</span> / ${assessments.length}</div>
+                <div class="flex items-center gap-3">
+                    <button onclick="changeSlide(-1)" id="prev-btn" class="nav-btn">
+                        <i data-lucide="arrow-left" width="18"></i>
+                    </button>
+                    <div class="bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-xs font-black min-w-[70px] text-center">
+                        <span id="current-slide-num">1</span> <span class="text-white/30 mx-1">/</span> <span id="total-slide-num">1</span>
+                    </div>
+                    <button onclick="changeSlide(1)" id="next-btn" class="nav-btn">
+                        <i data-lucide="arrow-right" width="18"></i>
+                    </button>
                 </div>
             </div>
         </div>
     `;
 
     document.getElementById('modal-container').classList.remove('hidden');
-    lucide.createIcons();
-
-    // Reset Slider State
-    state.currentSliderIndex = startIndex;
-    state.totalSlides = assessments.length;
     updateSliderUI();
 }
 
-function changeSlide(dir) {
-    const newIdx = state.currentSliderIndex + dir;
-    if (newIdx >= 0 && newIdx < state.totalSlides) {
-        state.currentSliderIndex = newIdx;
-        updateSliderUI();
-    }
+function switchAssessmentCase(key) {
+    state.activeGroupKey = key;
+    state.currentSliderIndex = 0;
+
+    // Update active tab UI
+    const tabs = document.querySelectorAll('.case-tab');
+    tabs.forEach(t => {
+        const span = t.querySelector('span');
+        if (span && span.innerText === key) t.classList.add('active');
+        else t.classList.remove('active');
+    });
+
+    updateSliderUI();
 }
 
 function updateSliderUI() {
-    const wrapper = document.getElementById('assessment-slide-wrapper');
-    if (!wrapper) return;
+    const container = document.getElementById('slider-main-container');
+    const group = state.assessmentGroups[state.activeGroupKey];
+    const a = group[state.currentSliderIndex];
 
-    // Move Wrapper
-    wrapper.style.transform = `translateX(-${state.currentSliderIndex * 100}%)`;
+    if (!container || !a) return;
 
-    // Update Dots
-    const dots = document.querySelectorAll('.step-dot');
-    dots.forEach((dot, i) => {
-        if (i === state.currentSliderIndex) dot.classList.add('active');
-        else dot.classList.remove('active');
-    });
+    // Render dots
+    const dotsContainer = document.getElementById('slider-dots');
+    if (dotsContainer) {
+        dotsContainer.innerHTML = group.map((_, i) => `<div class="step-dot ${i === state.currentSliderIndex ? 'active' : ''}"></div>`).join('');
+    }
+
+    // Content Rendering (Full Data PDF Style)
+    container.innerHTML = `
+        <div class="h-full overflow-y-auto p-8 md:p-12 custom-scroll fade-in" id="slide-content-scroll">
+            <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10">
+                
+                <!-- Left Column: Primary Info & Body Chart -->
+                <div class="lg:col-span-5 space-y-8">
+                    <!-- Pertemuan Badge -->
+                    <div class="inline-flex items-center gap-4 bg-blue-600/10 border border-blue-500/20 px-6 py-3 rounded-2xl shadow-xl shadow-blue-500/5">
+                        <span class="text-blue-400 text-xs font-black uppercase tracking-widest">Pertemuan</span>
+                        <span class="text-4xl font-black text-blue-500 leading-none">${state.currentSliderIndex + 1}</span>
+                        <div class="w-px h-8 bg-white/10 mx-2"></div>
+                        <div class="text-left">
+                            <p class="text-white/40 text-[9px] font-black uppercase tracking-widest mb-0.5">Tanggal</p>
+                            <p class="text-sm font-bold text-white">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        </div>
+                    </div>
+
+                    <!-- Diagnosis Box -->
+                    <div class="bg-indigo-600/5 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden group">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><i data-lucide="stethoscope" width="120"></i></div>
+                        <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="activity" width="14"></i> Medical Diagnosis</h4>
+                        <p class="text-2xl font-black text-white leading-tight mb-2">${a.diagnosis || '-'}</p>
+                        <div class="flex items-center gap-2">
+                           <span class="bg-white/5 border border-white/10 px-2 py-1 rounded-md text-[10px] font-mono text-white/60">ICD-10: ${a.icd || '-'}</span>
+                           <span class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-md text-[10px] font-bold">ICF: ${a.icf_codes || '-'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Body Chart -->
+                    <div class="bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center">
+                        <h4 class="w-full text-red-400 text-[10px] font-black uppercase tracking-widest mb-6 flex items-center gap-2"><i data-lucide="target" width="14"></i> Pain Body Chart</h4>
+                        <div class="relative w-[280px] h-[360px] bg-white rounded-2xl p-4 shadow-inner">
+                            <img src="${window.IMG_ASSETS.body_chart}" class="w-full h-full object-contain mix-blend-multiply opacity-80 select-none pointer-events-none">
+                            <div class="absolute inset-0 p-4">
+                                ${(a.pain_points || []).map((pt, idx) => `
+                                    <div class="absolute w-6 h-6 -ml-3 -mt-3 bg-red-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-[10px] text-white font-black animate-pulse-short" style="left: ${pt.x}%; top: ${pt.y}%;">
+                                        ${idx + 1}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="mt-6 w-full bg-slate-800/50 rounded-2xl p-5 border border-white/5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs font-bold text-white/50 uppercase">VAS Pain Score</span>
+                                <span class="text-3xl font-black text-red-500">${a.vas || 0}<span class="text-xs text-white/20 font-normal">/10</span></span>
+                            </div>
+                            <div class="mt-3 w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-yellow-400 to-red-500 shadow-lg shadow-red-500/20" style="width: ${(a.vas || 0) * 10}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: SOAPIER Details -->
+                <div class="lg:col-span-7 space-y-8">
+                    <!-- Subjective / Anamnesis -->
+                    <div class="bg-white/5 border border-white/10 rounded-3xl p-7">
+                        <h4 class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="message-square" width="14"></i> Anamnesis & History</h4>
+                        <p class="text-sm leading-relaxed text-white/80 whitespace-pre-line bg-white/5 p-5 rounded-2xl border border-white/5">${a.custom_assessment || '-'}</p>
+                    </div>
+
+                    <!-- Objective Data Grid -->
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="bg-emerald-500/5 border border-emerald-500/10 rounded-3xl p-5 text-center transition-all hover:bg-emerald-500/10">
+                            <p class="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">ROM</p>
+                            <p class="text-sm font-bold truncate">${a.obj?.rom || '-'}</p>
+                        </div>
+                        <div class="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-5 text-center transition-all hover:bg-blue-500/10">
+                            <p class="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">MMT</p>
+                            <p class="text-sm font-bold">${a.obj?.mmt || '-'}</p>
+                        </div>
+                        <div class="bg-purple-500/5 border border-purple-500/10 rounded-3xl p-5 text-center transition-all hover:bg-purple-500/10">
+                            <p class="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1">Balance</p>
+                            <p class="text-sm font-bold truncate">${a.obj?.balance || '-'}</p>
+                        </div>
+                    </div>
+
+                    <!-- ICF Sections (Impairment & Limitation) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="activity" width="14"></i> Body Function (b)</h4>
+                            <div class="space-y-2">
+                                ${Array.isArray(a.b) && a.b.length ? a.b.map(item => `<div class="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 text-xs text-white/70 flex items-start gap-2"><i data-lucide="circle" width="8" class="mt-1.5 opacity-30"></i> <span>${item}</span></div>`).join('') : '<p class="text-[10px] italic text-white/20">Empty</p>'}
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="box" width="14"></i> Body Structure (s)</h4>
+                            <div class="space-y-2">
+                                ${Array.isArray(a.s) && a.s.length ? a.s.map(item => `<div class="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 text-xs text-white/70 flex items-start gap-2"><i data-lucide="circle" width="8" class="mt-1.5 opacity-30"></i> <span>${item}</span></div>`).join('') : '<p class="text-[10px] italic text-white/20">Empty</p>'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Intervention & Plan -->
+                    <div class="bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 rounded-4xl p-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="zap" width="14"></i> Intervensi</h4>
+                                <div class="flex flex-wrap gap-2">
+                                    ${Array.isArray(a.intervention) && a.intervention.length ? a.intervention.map(i => `<span class="bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-500/10">${i}</span>`).join('') : '<span class="text-xs italic text-white/20">-</span>'}
+                                </div>
+                            </div>
+                            <div class="bg-white/5 p-6 rounded-3xl border border-white/5">
+                                <h4 class="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="line-chart" width="14"></i> Evaluation & Plan</h4>
+                                <div class="space-y-3">
+                                    ${Array.isArray(a.eval) && a.eval.length ? a.eval.map(e => `<div class="text-xs text-white/80 flex items-start gap-2"><i data-lucide="check-circle" width="14" class="text-emerald-500 mt-0.5 shrink-0"></i> <span>${e}</span></div>`).join('') : '<p class="text-xs italic text-white/20">Empty</p>'}
+                                    <div class="mt-4 pt-4 border-t border-white/10">
+                                        <p class="text-[9px] text-white/30 uppercase font-black mb-1">Rencana Lanjut</p>
+                                        <p class="text-xs font-bold text-emerald-400">${a.plan || '-'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    lucide.createIcons();
 
     // Update Counter
-    const num = document.getElementById('current-slide-num');
-    if (num) num.innerText = state.currentSliderIndex + 1;
+    document.getElementById('current-slide-num').innerText = state.currentSliderIndex + 1;
+    document.getElementById('total-slide-num').innerText = group.length;
 
-    // Update Button Visibility
+    // Update Nav Buttons
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
 
-    if (prevBtn) prevBtn.style.opacity = state.currentSliderIndex === 0 ? '0.2' : '1';
-    if (prevBtn) prevBtn.style.pointerEvents = state.currentSliderIndex === 0 ? 'none' : 'auto';
+    if (prevBtn) {
+        prevBtn.style.opacity = state.currentSliderIndex === 0 ? '0.2' : '1';
+        prevBtn.style.pointerEvents = state.currentSliderIndex === 0 ? 'none' : 'auto';
+    }
+    if (nextBtn) {
+        nextBtn.style.opacity = state.currentSliderIndex === group.length - 1 ? '0.2' : '1';
+        nextBtn.style.pointerEvents = state.currentSliderIndex === group.length - 1 ? 'none' : 'auto';
+    }
+}
 
-    if (nextBtn) nextBtn.style.opacity = state.currentSliderIndex === state.totalSlides - 1 ? '0.2' : '1';
-    if (nextBtn) nextBtn.style.pointerEvents = state.currentSliderIndex === state.totalSlides - 1 ? 'none' : 'auto';
+function changeSlide(dir) {
+    const group = state.assessmentGroups[state.activeGroupKey];
+    if (!group) return;
+
+    const newIdx = state.currentSliderIndex + dir;
+    if (newIdx >= 0 && newIdx < group.length) {
+        state.currentSliderIndex = newIdx;
+        updateSliderUI();
+    }
 }
 
 // --- 12. PAIN MAP LOGIC ---
