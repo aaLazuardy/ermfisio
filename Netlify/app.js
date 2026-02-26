@@ -1500,6 +1500,7 @@ function renderAssessmentList(container) {
         <div class="space-y-4 fade-in pb-24"> <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-3">
             <div><h3 class="font-bold text-lg text-slate-800 leading-tight">${headerText}</h3><p class="text-xs text-slate-500">Total: ${filteredAssessments.length} data</p></div>
             <div class="flex gap-2">
+                ${state.filterPatientId ? `<button onclick="renderAssessmentSlider('${state.filterPatientId}')" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-lg animate-bounce-short"><i data-lucide="presentation" width="14"></i> Slide Riwayat</button>` : ''}
                 ${state.filterPatientId ? `<button onclick="state.filterPatientId=null; renderAssessmentList(document.getElementById('main-content'))" class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 flex items-center gap-2"><i data-lucide="x" width="14"></i> Reset Filter</button>` : ''}
                 <button id="btn-print-multi" onclick="printSelected()" class="hidden bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-slate-700 animate-bounce-short"><i data-lucide="printer" width="14"></i> Cetak (<span id="sel-count">0</span>)</button>
             </div>
@@ -2141,14 +2142,12 @@ function goToFormManual() { window.tempFormData.diagnosis = ''; showStep2(); }
 function showStep1() { document.getElementById('step-1').classList.remove('hidden'); document.getElementById('step-2').classList.add('hidden'); }
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
 function updateICFSelectionUI() {
-    // Granular update: only rebuild the filter pills and template grid.
-    // Does NOT touch Step-2 (form data area) at all, preventing full flicker.
     const container = document.getElementById('icf-selection-container');
     if (!container) {
-        // Fallback: full re-render if container not found yet
         renderAssessmentForm(document.getElementById('main-content'), true);
         return;
     }
+
     // Rebuild region pills
     const regions = ['Semua'];
     Object.keys(ICF_TEMPLATES).forEach(t => {
@@ -2183,6 +2182,7 @@ function updateICFSelectionUI() {
     renderIcons();
 }
 
+
 function setTemplateCategory(cat) {
     currentTemplateCategory = cat;
     currentTemplateRegion = 'Semua';
@@ -2198,9 +2198,173 @@ function handleTemplateSearch(query) {
     if (grid) {
         grid.innerHTML = renderTemplateGrid();
         renderIcons();
-    } else {
-        renderAssessmentForm(document.getElementById('main-content'), true);
     }
+}
+
+// --- 11. ASSESSMENT SLIDER / HISTORY UI ---
+function renderAssessmentSlider(patientId, startIndex = 0) {
+    const patient = state.patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    // Filter & Sort: Oldest to Newest (Pertemuan 1, 2, 3...)
+    const assessments = state.assessments
+        .filter(a => a.patientId === patientId)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (assessments.length === 0) {
+        showToast('Belum ada data riwayat untuk pasien ini.', 'error');
+        return;
+    }
+
+    const modalContent = document.getElementById('modal-content');
+    modalContent.innerHTML = `
+        <div class="bg-slate-900/95 backdrop-blur-xl flex flex-col h-[90vh] w-full max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-2xl border border-white/10 text-white relative">
+            <!-- Header -->
+            <div class="px-8 py-6 border-b border-white/10 flex justify-between items-center z-10 shrink-0">
+                <div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Assessment History</span>
+                        <span class="text-white/40 text-xs font-mono">${patientId}</span>
+                    </div>
+                    <h3 class="text-xl font-black">${patient.name}</h3>
+                </div>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full transition-all">
+                    <i data-lucide="x" width="20"></i>
+                </button>
+            </div>
+
+            <!-- Slider Body -->
+            <div class="flex-1 slide-container relative">
+                <div class="slide-wrapper h-full" id="assessment-slide-wrapper">
+                    ${assessments.map((a, idx) => `
+                        <div class="slide-item h-full flex flex-col p-6 md:p-10 overflow-y-auto custom-scroll">
+                            <div class="glass-card p-6 md:p-8 rounded-3xl border border-white/20 shadow-xl mb-6 relative overflow-hidden group">
+                                <div class="absolute top-0 right-0 p-8 opacity-5 -mr-4 -mt-4 transition-transform group-hover:scale-110">
+                                    <i data-lucide="activity" width="120" stroke-width="4"></i>
+                                </div>
+                                
+                                <div class="flex justify-between items-start mb-8 border-b border-white/10 pb-6">
+                                    <div class="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-2xl border border-blue-500/30 flex flex-col">
+                                        <span class="text-[10px] uppercase font-black tracking-widest leading-none mb-1">Pertemuan</span>
+                                        <span class="text-3xl font-black leading-none">${idx + 1}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-1">Tanggal Pemeriksaan</p>
+                                        <p class="text-xl font-bold">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div class="space-y-6">
+                                        <div>
+                                            <p class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="stethoscope" width="12"></i> Diagnosa Medis</p>
+                                            <p class="text-lg font-bold">${a.diagnosis || '-'}</p>
+                                            <p class="text-xs text-white/40 font-mono mt-1">ICD-10: ${a.icd || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="message-square" width="12"></i> Anamnesis / Keluhan</p>
+                                            <p class="text-sm leading-relaxed text-white/80 whitespace-pre-line">${a.custom_assessment || '-'}</p>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-6">
+                                        <div class="bg-white/5 p-4 rounded-2xl border border-white/10">
+                                            <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-3">Objektif Data</p>
+                                            <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-4">
+                                                <span class="text-xs">VAS Nyeri</span>
+                                                <span class="text-2xl font-black text-red-500">${a.vas || 0}/10</span>
+                                            </div>
+                                            <div class="grid grid-cols-3 gap-2 text-center">
+                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">ROM</p><p class="text-xs font-bold truncate">${a.obj?.rom || '-'}</p></div>
+                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">MMT</p><p class="text-xs font-bold">${a.obj?.mmt || '-'}</p></div>
+                                                <div class="bg-white/5 p-2 rounded-xl"><p class="text-[9px] text-white/30 uppercase font-black">Balance</p><p class="text-xs font-bold truncate">${a.obj?.balance || '-'}</p></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p class="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"><i data-lucide="check-circle" width="12"></i> Evaluasi Klinis</p>
+                                            <div class="space-y-1">
+                                                ${(Array.isArray(a.eval) ? a.eval : []).map(ev => `<div class="flex items-start gap-2 text-sm text-white/70 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10"><i data-lucide="check" width="14" class="text-emerald-500 shrink-0 mt-0.5"></i> <span>${ev}</span></div>`).join('') || '<p class="text-xs italic text-white/20">- Belum ada evaluasi -</p>'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-8 pt-6 border-t border-white/10">
+                                    <p class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2"><i data-lucide="zap" width="12"></i> Intervensi Diberikan</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${(Array.isArray(a.intervention) ? a.intervention : []).map(i => `<span class="bg-indigo-500/10 text-indigo-300 px-3 py-1 rounded-full text-xs border border-indigo-500/20 font-bold">${i}</span>`).join('') || '-'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Navigation Controls -->
+                <button onclick="changeSlide(-1)" id="prev-btn" class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/20 border border-white/10 rounded-full transition-all text-white/50 hover:text-white z-20 group">
+                    <i data-lucide="chevron-left" width="24" class="group-hover:-translate-x-1 transition-transform"></i>
+                </button>
+                <button onclick="changeSlide(1)" id="next-btn" class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/20 border border-white/10 rounded-full transition-all text-white/50 hover:text-white z-20 group">
+                    <i data-lucide="chevron-right" width="24" class="group-hover:translate-x-1 transition-transform"></i>
+                </button>
+            </div>
+
+            <!-- Footer Dots -->
+            <div class="px-8 py-6 border-t border-white/10 bg-black/20 shrink-0">
+                <div class="step-indicator" id="slider-dots">
+                    ${assessments.map((_, i) => `<div class="step-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
+                </div>
+                <div class="flex justify-between items-center mt-4">
+                    <p class="text-[10px] font-black text-white/30 uppercase tracking-widest">Gunakan panah atau swipe untuk navigasi</p>
+                    <div class="text-xs font-bold text-white/60"><span id="current-slide-num">1</span> / ${assessments.length}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modal-container').classList.remove('hidden');
+    lucide.createIcons();
+
+    // Reset Slider State
+    state.currentSliderIndex = startIndex;
+    state.totalSlides = assessments.length;
+    updateSliderUI();
+}
+
+function changeSlide(dir) {
+    const newIdx = state.currentSliderIndex + dir;
+    if (newIdx >= 0 && newIdx < state.totalSlides) {
+        state.currentSliderIndex = newIdx;
+        updateSliderUI();
+    }
+}
+
+function updateSliderUI() {
+    const wrapper = document.getElementById('assessment-slide-wrapper');
+    if (!wrapper) return;
+
+    // Move Wrapper
+    wrapper.style.transform = `translateX(-${state.currentSliderIndex * 100}%)`;
+
+    // Update Dots
+    const dots = document.querySelectorAll('.step-dot');
+    dots.forEach((dot, i) => {
+        if (i === state.currentSliderIndex) dot.classList.add('active');
+        else dot.classList.remove('active');
+    });
+
+    // Update Counter
+    const num = document.getElementById('current-slide-num');
+    if (num) num.innerText = state.currentSliderIndex + 1;
+
+    // Update Button Visibility
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+
+    if (prevBtn) prevBtn.style.opacity = state.currentSliderIndex === 0 ? '0.2' : '1';
+    if (prevBtn) prevBtn.style.pointerEvents = state.currentSliderIndex === 0 ? 'none' : 'auto';
+
+    if (nextBtn) nextBtn.style.opacity = state.currentSliderIndex === state.totalSlides - 1 ? '0.2' : '1';
+    if (nextBtn) nextBtn.style.pointerEvents = state.currentSliderIndex === state.totalSlides - 1 ? 'none' : 'auto';
 }
 
 // --- 12. PAIN MAP LOGIC ---
