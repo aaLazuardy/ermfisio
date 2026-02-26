@@ -948,17 +948,19 @@ window.addEventListener('resize', () => {
 });
 
 // --- 6. RENDER APP ---
+let _lastRenderedView = null;
+
 function renderApp() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.getElementById('app-layout');
     const printContainer = document.getElementById('print-container');
-    window.scrollTo(0, 0);
 
     if (!state.user) {
         document.body.style.overflow = 'auto';
         loginScreen.classList.remove('hidden');
         appLayout.classList.add('hidden');
         printContainer.classList.add('hidden');
+        _lastRenderedView = null;
         return;
     }
 
@@ -971,13 +973,14 @@ function renderApp() {
     if (state.currentView === 'print') {
         appLayout.classList.add('hidden');
         printContainer.classList.remove('hidden');
-        printContainer.style.display = 'block'; // Force override CSS ID selector
+        printContainer.style.display = 'block';
         document.body.style.overflow = 'auto';
         renderPrintView(printContainer);
+        _lastRenderedView = 'print';
     } else {
         appLayout.classList.remove('hidden');
         printContainer.classList.add('hidden');
-        printContainer.style.display = 'none'; // Force override to hide
+        printContainer.style.display = 'none';
         document.body.style.overflow = 'hidden';
 
         ['dashboard', 'schedule', 'patients', 'assessments', 'kasir', 'config'].forEach(v => {
@@ -992,7 +995,14 @@ function renderApp() {
 
         const main = document.getElementById('main-content');
         const pageTitle = document.getElementById('page-title');
-        main.innerHTML = '';
+
+        // Only clear & re-render if view actually changed
+        const viewChanged = _lastRenderedView !== state.currentView;
+        if (viewChanged) {
+            main.innerHTML = '';
+            window.scrollTo(0, 0);
+        }
+        _lastRenderedView = state.currentView;
 
         try {
             if (state.currentView === 'dashboard') { pageTitle.innerText = 'Dashboard'; renderDashboard(main); }
@@ -1656,19 +1666,20 @@ function renderAssessmentForm(container, useTempData = false) {
                                     <i data-lucide="search" class="absolute left-3 top-2.5 text-slate-400" width="16"></i>
                                     <input type="text" id="icf-search" onkeyup="handleTemplateSearch(this.value)" value="${templateSearchQuery}" placeholder="Cari kasus (misal: HNP)..." class="pl-10 w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm">
                                 </div>
-
-                                <div class="flex flex-wrap gap-2 justify-center">
-                                    ${['Semua', 'Muskulo', 'Neuro', 'Pediatri', 'Geriatri', 'Sport', 'Kardio'].map(cat => `
-                                        <button onclick="setTemplateCategory('${cat}')" class="text-[10px] uppercase px-3 py-1.5 rounded-full font-bold transition-all border ${currentTemplateCategory === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">${cat}</button>
-                                    `).join('')}
-                                </div>
                             </div>
                         </div>
 
-                        <!-- Sub-Filter Regio -->
-                        <div class="mb-6 flex flex-wrap gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter mr-2 shrink-0">Filter Regio:</span>
-                            ${(() => {
+                        <div id="icf-selection-container">
+                            <div class="flex flex-wrap gap-2 justify-center mb-3">
+                                ${['Semua', 'Muskulo', 'Neuro', 'Pediatri', 'Geriatri', 'Sport', 'Kardio'].map(cat => `
+                                    <button onclick="setTemplateCategory('${cat}')" class="text-[10px] uppercase px-3 py-1.5 rounded-full font-bold transition-all border ${currentTemplateCategory === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">${cat}</button>
+                                `).join('')}
+                            </div>
+
+                            <!-- Sub-Filter Regio -->
+                            <div class="mb-6 flex flex-wrap gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+                                <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter mr-2 shrink-0">Filter Regio:</span>
+                                ${(() => {
             const regions = ['Semua'];
             Object.keys(ICF_TEMPLATES).forEach(t => {
                 const item = ICF_TEMPLATES[t];
@@ -1676,15 +1687,15 @@ function renderAssessmentForm(container, useTempData = false) {
                     if (item.region && !regions.includes(item.region)) regions.push(item.region);
                 }
             });
-            // Sort regions but keep 'Semua' first
             const sortedRegions = ['Semua', ...regions.filter(r => r !== 'Semua').sort()];
             return sortedRegions.map(reg => `
-                                    <button onclick="setTemplateRegion('${reg}')" class="text-[9px] font-bold px-3 py-1.5 rounded-lg transition-all border shrink-0 ${currentTemplateRegion === reg ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-400'}">${reg}</button>
-                                `).join('');
+                                        <button onclick="setTemplateRegion('${reg}')" class="text-[9px] font-bold px-3 py-1.5 rounded-lg transition-all border shrink-0 ${currentTemplateRegion === reg ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-400'}">${reg}</button>
+                                    `).join('');
         })()}
-                        </div>
-                        <div id="icf-template-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
-                            ${renderTemplateGrid()}
+                            </div>
+                            <div id="icf-template-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
+                                ${renderTemplateGrid()}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2129,14 +2140,57 @@ function selectTemplateAndGo(tName) { applyTemplate(tName); showStep2(); }
 function goToFormManual() { window.tempFormData.diagnosis = ''; showStep2(); }
 function showStep1() { document.getElementById('step-1').classList.remove('hidden'); document.getElementById('step-2').classList.add('hidden'); }
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
+function updateICFSelectionUI() {
+    // Granular update: only rebuild the filter pills and template grid.
+    // Does NOT touch Step-2 (form data area) at all, preventing full flicker.
+    const container = document.getElementById('icf-selection-container');
+    if (!container) {
+        // Fallback: full re-render if container not found yet
+        renderAssessmentForm(document.getElementById('main-content'), true);
+        return;
+    }
+    // Rebuild region pills
+    const regions = ['Semua'];
+    Object.keys(ICF_TEMPLATES).forEach(t => {
+        const item = ICF_TEMPLATES[t];
+        if (currentTemplateCategory === 'Semua' || item.category === currentTemplateCategory) {
+            if (item.region && !regions.includes(item.region)) regions.push(item.region);
+        }
+    });
+    const sortedRegions = ['Semua', ...regions.filter(r => r !== 'Semua').sort()];
+
+    // Rebuild category pills html
+    const catPillsHtml = ['Semua', 'Muskulo', 'Neuro', 'Pediatri', 'Geriatri', 'Sport', 'Kardio'].map(cat =>
+        `<button onclick="setTemplateCategory('${cat}')" class="text-[10px] uppercase px-3 py-1.5 rounded-full font-bold transition-all border ${currentTemplateCategory === cat ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">${cat}</button>`
+    ).join('');
+
+    const regionPillsHtml = sortedRegions.map(reg =>
+        `<button onclick="setTemplateRegion('${reg}')" class="text-[9px] font-bold px-3 py-1.5 rounded-lg transition-all border shrink-0 ${currentTemplateRegion === reg ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-400'}">${reg}</button>`
+    ).join('');
+
+    container.innerHTML = `
+        <div class="flex flex-wrap gap-2 justify-center">
+            ${catPillsHtml}
+        </div>
+        <div class="mb-6 flex flex-wrap gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter mr-2 shrink-0">Filter Regio:</span>
+            ${regionPillsHtml}
+        </div>
+        <div id="icf-template-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
+            ${renderTemplateGrid()}
+        </div>
+    `;
+    renderIcons();
+}
+
 function setTemplateCategory(cat) {
     currentTemplateCategory = cat;
     currentTemplateRegion = 'Semua';
-    renderAssessmentForm(document.getElementById('main-content'), true);
+    updateICFSelectionUI();
 }
 function setTemplateRegion(reg) {
     currentTemplateRegion = reg;
-    renderAssessmentForm(document.getElementById('main-content'), true);
+    updateICFSelectionUI();
 }
 function handleTemplateSearch(query) {
     templateSearchQuery = query;
