@@ -74,6 +74,7 @@ let state = {
 };
 
 let currentTemplateCategory = 'Semua';
+let currentTemplateRegion = 'Semua';
 let templateSearchQuery = '';
 let selectedExercises = [];
 window.tempFormData = {};
@@ -1663,6 +1664,25 @@ function renderAssessmentForm(container, useTempData = false) {
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Sub-Filter Regio -->
+                        <div class="mb-6 flex flex-wrap gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter mr-2 shrink-0">Filter Regio:</span>
+                            ${(() => {
+            const regions = ['Semua'];
+            Object.keys(ICF_TEMPLATES).forEach(t => {
+                const item = ICF_TEMPLATES[t];
+                if (currentTemplateCategory === 'Semua' || item.category === currentTemplateCategory) {
+                    if (item.region && !regions.includes(item.region)) regions.push(item.region);
+                }
+            });
+            // Sort regions but keep 'Semua' first
+            const sortedRegions = ['Semua', ...regions.filter(r => r !== 'Semua').sort()];
+            return sortedRegions.map(reg => `
+                                    <button onclick="setTemplateRegion('${reg}')" class="text-[9px] font-bold px-3 py-1.5 rounded-lg transition-all border shrink-0 ${currentTemplateRegion === reg ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-400'}">${reg}</button>
+                                `).join('');
+        })()}
+                        </div>
                         <div id="icf-template-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[200px]">
                             ${renderTemplateGrid()}
                         </div>
@@ -1849,9 +1869,11 @@ function renderAssessmentForm(container, useTempData = false) {
 
 function renderTemplateGrid() {
     const templates = Object.keys(ICF_TEMPLATES).filter(t => {
-        const matchesCat = currentTemplateCategory === 'Semua' || ICF_TEMPLATES[t].category === currentTemplateCategory;
+        const item = ICF_TEMPLATES[t];
+        const matchesCat = currentTemplateCategory === 'Semua' || item.category === currentTemplateCategory;
+        const matchesReg = currentTemplateRegion === 'Semua' || item.region === currentTemplateRegion;
         const matchesSearch = t.toLowerCase().includes(templateSearchQuery.toLowerCase());
-        return matchesCat && matchesSearch;
+        return matchesCat && matchesReg && matchesSearch;
     });
 
     if (templates.length === 0) {
@@ -1869,6 +1891,7 @@ function renderTemplateGrid() {
             </div>
             <div class="mt-3 flex flex-wrap gap-1 relative z-10">
                 <span class="text-[9px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ICD: ${ICF_TEMPLATES[t].icd || '-'}</span>
+                ${ICF_TEMPLATES[t].region ? `<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-bold">${ICF_TEMPLATES[t].region}</span>` : ''}
                 ${ICF_TEMPLATES[t].category ? `<span class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold uppercase">${ICF_TEMPLATES[t].category}</span>` : ''}
             </div>
         </button>
@@ -2108,14 +2131,12 @@ function showStep1() { document.getElementById('step-1').classList.remove('hidde
 function showStep2() { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); const scrollArea = document.getElementById('main-form-scroll'); if (scrollArea) scrollArea.scrollTop = 0; renderIcons(); }
 function setTemplateCategory(cat) {
     currentTemplateCategory = cat;
-    const grid = document.getElementById('icf-template-grid');
-    if (grid) {
-        grid.innerHTML = renderTemplateGrid();
-        renderIcons();
-    } else {
-        renderAssessmentForm(document.getElementById('main-content'), true);
-    }
-    showStep1();
+    currentTemplateRegion = 'Semua';
+    renderAssessmentForm(document.getElementById('main-content'), true);
+}
+function setTemplateRegion(reg) {
+    currentTemplateRegion = reg;
+    renderAssessmentForm(document.getElementById('main-content'), true);
 }
 function handleTemplateSearch(query) {
     templateSearchQuery = query;
