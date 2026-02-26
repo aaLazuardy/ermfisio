@@ -2319,114 +2319,135 @@ function updateSliderUI() {
 
     // Content Rendering (Full Data PDF Style)
     container.innerHTML = `
-        <div class="h-full overflow-y-auto p-8 md:p-12 custom-scroll fade-in" id="slide-content-scroll">
-            <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div class="h-full overflow-y-auto p-6 md:p-10 lg:p-14 custom-scroll fade-in" id="slide-content-scroll">
+            <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-10 lg:gap-14">
                 
-                <!-- Left Column: Primary Info & Body Chart -->
-                <div class="lg:col-span-5 space-y-8">
-                    <!-- Pertemuan Badge -->
-                    <div class="inline-flex items-center gap-4 bg-blue-600/10 border border-blue-500/20 px-6 py-3 rounded-2xl shadow-xl shadow-blue-500/5">
-                        <span class="text-blue-400 text-xs font-black uppercase tracking-widest">Pertemuan</span>
-                        <span class="text-4xl font-black text-blue-500 leading-none">${state.currentSliderIndex + 1}</span>
-                        <div class="w-px h-8 bg-white/10 mx-2"></div>
+                <!-- Left Column: Primary Info & Body Chart (Sticky-ish on Desktop) -->
+                <div class="lg:w-[42%] space-y-8">
+                    <!-- Pertemuan Badge with improved spacing -->
+                    <div class="flex items-center gap-5 bg-blue-600/10 border border-blue-500/20 px-8 py-5 rounded-[2rem] shadow-xl shadow-blue-500/5 backdrop-blur-md">
+                        <div class="flex flex-col items-center">
+                            <span class="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Pertemuan</span>
+                            <span class="text-5xl font-black text-blue-500 leading-none">${state.currentSliderIndex + 1}</span>
+                        </div>
+                        <div class="w-px h-12 bg-white/10 mx-1"></div>
                         <div class="text-left">
-                            <p class="text-white/40 text-[9px] font-black uppercase tracking-widest mb-0.5">Tanggal</p>
-                            <p class="text-sm font-bold text-white">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                            <p class="text-white/40 text-[10px] font-black uppercase tracking-widest mb-1">Pemeriksaan</p>
+                            <p class="text-lg font-bold text-white tracking-tight">${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
                     </div>
 
-                    <!-- Diagnosis Box -->
-                    <div class="bg-indigo-600/5 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden group">
-                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:scale-110 transition-transform"><i data-lucide="stethoscope" width="120"></i></div>
-                        <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="activity" width="14"></i> Medical Diagnosis</h4>
-                        <p class="text-2xl font-black text-white leading-tight mb-2">${a.diagnosis || '-'}</p>
-                        <div class="flex items-center gap-2">
-                           <span class="bg-white/5 border border-white/10 px-2 py-1 rounded-md text-[10px] font-mono text-white/60">ICD-10: ${a.icd || '-'}</span>
-                           <span class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-md text-[10px] font-bold">ICF: ${a.icf_codes || '-'}</span>
+                    <!-- Diagnosis Card (Premium) -->
+                    <div class="bg-indigo-600/10 border border-indigo-400/20 rounded-[2.5rem] p-8 relative overflow-hidden group shadow-2xl">
+                        <div class="absolute -right-6 -top-6 opacity-[0.03] group-hover:scale-110 transition-transform duration-700">
+                            <i data-lucide="stethoscope" width="160"></i>
+                        </div>
+                        <h4 class="text-indigo-400/70 text-[10px] font-black uppercase tracking-[0.2em] mb-5 flex items-center gap-2"><i data-lucide="activity" width="14" stroke-width="3"></i> Medical Diagnosis</h4>
+                        <p class="text-3xl font-black text-white leading-[1.1] mb-6 tracking-tight">${a.diagnosis || '-'}</p>
+                        <div class="flex flex-wrap items-center gap-3">
+                           <span class="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-mono text-white/50">#${a.icd || 'N/A'}</span>
+                           <span class="bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-indigo-500/10">ICF: ${a.icf_codes || '-'}</span>
                         </div>
                     </div>
 
-                    <!-- Body Chart -->
-                    <div class="bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center">
-                        <h4 class="w-full text-red-400 text-[10px] font-black uppercase tracking-widest mb-6 flex items-center gap-2"><i data-lucide="target" width="14"></i> Pain Body Chart</h4>
-                        <div class="relative w-[280px] h-[360px] bg-white rounded-2xl p-4 shadow-inner">
-                            <img src="${window.IMG_ASSETS.body_chart}" class="w-full h-full object-contain mix-blend-multiply opacity-80 select-none pointer-events-none">
-                            <div class="absolute inset-0 p-4">
+                    <!-- Body Chart Section (Centered & Clear) -->
+                    <div class="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-8 flex flex-col items-center shadow-xl">
+                        <h4 class="w-full text-red-400/70 text-[10px] font-black uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i data-lucide="target" width="14" stroke-width="3"></i> Pain Distribution</h4>
+                        <div class="relative w-full max-w-[280px] bg-white rounded-3xl p-6 shadow-2xl shadow-black/50 overflow-hidden">
+                            <img src="${window.IMG_ASSETS.body_chart}" class="w-full h-auto object-contain mix-blend-multiply opacity-90 select-none pointer-events-none">
+                            <div class="absolute inset-0 p-6">
                                 ${(a.pain_points || []).map((pt, idx) => `
-                                    <div class="absolute w-6 h-6 -ml-3 -mt-3 bg-red-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-[10px] text-white font-black animate-pulse-short" style="left: ${pt.x}%; top: ${pt.y}%;">
+                                    <div class="absolute w-7 h-7 -ml-3.5 -mt-3.5 bg-red-600 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-[10px] text-white font-black animate-pulse-short" style="left: ${pt.x}%; top: ${pt.y}%;">
                                         ${idx + 1}
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
-                        <div class="mt-6 w-full bg-slate-800/50 rounded-2xl p-5 border border-white/5">
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs font-bold text-white/50 uppercase">VAS Pain Score</span>
-                                <span class="text-3xl font-black text-red-500">${a.vas || 0}<span class="text-xs text-white/20 font-normal">/10</span></span>
+                        
+                        <!-- VAS Scale (Compact & High Contrast) -->
+                        <div class="mt-8 w-full bg-slate-800/80 rounded-3xl p-6 border border-white/5 shadow-lg">
+                            <div class="flex justify-between items-end mb-4">
+                                <span class="text-[10px] font-black text-white/40 uppercase tracking-widest">VAS Score</span>
+                                <span class="text-4xl font-black text-red-500 leading-none">${a.vas || 0}<span class="text-sm text-white/20 font-normal">/10</span></span>
                             </div>
-                            <div class="mt-3 w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-yellow-400 to-red-500 shadow-lg shadow-red-500/20" style="width: ${(a.vas || 0) * 10}%"></div>
+                            <div class="w-full h-3 bg-white/5 rounded-full overflow-hidden p-0.5">
+                                <div class="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 rounded-full shadow-lg shadow-red-500/20 transition-all duration-1000" style="width: ${(a.vas || 0) * 10}%"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right Column: SOAPIER Details -->
-                <div class="lg:col-span-7 space-y-8">
-                    <!-- Subjective / Anamnesis -->
-                    <div class="bg-white/5 border border-white/10 rounded-3xl p-7">
-                        <h4 class="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="message-square" width="14"></i> Anamnesis & History</h4>
-                        <p class="text-sm leading-relaxed text-white/80 whitespace-pre-line bg-white/5 p-5 rounded-2xl border border-white/5">${a.custom_assessment || '-'}</p>
-                    </div>
-
-                    <!-- Objective Data Grid -->
-                    <div class="grid grid-cols-3 gap-4">
-                        <div class="bg-emerald-500/5 border border-emerald-500/10 rounded-3xl p-5 text-center transition-all hover:bg-emerald-500/10">
-                            <p class="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">ROM</p>
-                            <p class="text-sm font-bold truncate">${a.obj?.rom || '-'}</p>
-                        </div>
-                        <div class="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-5 text-center transition-all hover:bg-blue-500/10">
-                            <p class="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">MMT</p>
-                            <p class="text-sm font-bold">${a.obj?.mmt || '-'}</p>
-                        </div>
-                        <div class="bg-purple-500/5 border border-purple-500/10 rounded-3xl p-5 text-center transition-all hover:bg-purple-500/10">
-                            <p class="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1">Balance</p>
-                            <p class="text-sm font-bold truncate">${a.obj?.balance || '-'}</p>
+                <!-- Right Column: SOAPIER Details (More Spaced Out) -->
+                <div class="lg:w-[58%] space-y-10">
+                    <!-- Subjective Card -->
+                    <div class="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-8 shadow-xl">
+                        <h4 class="text-blue-400/80 text-[10px] font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><i data-lucide="message-square" width="16" stroke-width="3"></i> Subjective / Anamnesis</h4>
+                        <div class="text-base leading-relaxed text-white/80 whitespace-pre-line bg-black/20 p-6 rounded-[1.5rem] border border-white/5 break-words">
+                            ${a.custom_assessment || '<p class="text-white/20 italic">Tidak ada catatan subjektif.</p>'}
                         </div>
                     </div>
 
-                    <!-- ICF Sections (Impairment & Limitation) -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-4">
-                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="activity" width="14"></i> Body Function (b)</h4>
-                            <div class="space-y-2">
-                                ${Array.isArray(a.b) && a.b.length ? a.b.map(item => `<div class="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 text-xs text-white/70 flex items-start gap-2"><i data-lucide="circle" width="8" class="mt-1.5 opacity-30"></i> <span>${item}</span></div>`).join('') : '<p class="text-[10px] italic text-white/20">Empty</p>'}
+                    <!-- Objective Data Cards -->
+                    <div class="grid grid-cols-3 gap-6">
+                        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
+                            <p class="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 opacity-60">Range of Motion</p>
+                            <p class="text-lg font-black text-white truncate px-1">${a.obj?.rom || '-'}</p>
+                        </div>
+                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
+                            <p class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 opacity-60">MMT Score</p>
+                            <p class="text-lg font-black text-white">${a.obj?.mmt || '-'}</p>
+                        </div>
+                        <div class="bg-purple-500/10 border border-purple-500/20 rounded-3xl p-6 text-center transform hover:scale-[1.02] transition-transform">
+                            <p class="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 opacity-60">Balance Test</p>
+                            <p class="text-lg font-black text-white truncate px-1">${a.obj?.balance || '-'}</p>
+                        </div>
+                    </div>
+
+                    <!-- ICF b & s Sections -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-white/[0.02] rounded-[2rem] p-7 border border-white/5">
+                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-6 flex items-center gap-2"><i data-lucide="layers-3" width="14"></i> Body Functions (b)</h4>
+                            <div class="space-y-3">
+                                ${Array.isArray(a.b) && a.b.length ? a.b.map(item => `
+                                    <div class="bg-white/5 px-5 py-3 rounded-2xl border border-white/5 text-xs text-white/70 flex items-start gap-3 group">
+                                        <i data-lucide="check" width="12" class="mt-0.5 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                        <span class="leading-tight">${item}</span>
+                                    </div>`).join('') : '<p class="text-xs italic text-white/10 ml-2">Empty</p>'}
                             </div>
                         </div>
-                        <div class="space-y-4">
-                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><i data-lucide="box" width="14"></i> Body Structure (s)</h4>
-                            <div class="space-y-2">
-                                ${Array.isArray(a.s) && a.s.length ? a.s.map(item => `<div class="bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 text-xs text-white/70 flex items-start gap-2"><i data-lucide="circle" width="8" class="mt-1.5 opacity-30"></i> <span>${item}</span></div>`).join('') : '<p class="text-[10px] italic text-white/20">Empty</p>'}
+                        <div class="bg-white/[0.02] rounded-[2rem] p-7 border border-white/5">
+                            <h4 class="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-6 flex items-center gap-2"><i data-lucide="box" width="14"></i> Body Structures (s)</h4>
+                            <div class="space-y-3">
+                                ${Array.isArray(a.s) && a.s.length ? a.s.map(item => `
+                                    <div class="bg-white/5 px-5 py-3 rounded-2xl border border-white/5 text-xs text-white/70 flex items-start gap-3 group">
+                                        <i data-lucide="check" width="12" class="mt-0.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                        <span class="leading-tight">${item}</span>
+                                    </div>`).join('') : '<p class="text-xs italic text-white/10 ml-2">Empty</p>'}
                             </div>
                         </div>
                     </div>
 
-                    <!-- Intervention & Plan -->
-                    <div class="bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 rounded-4xl p-8">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div>
-                                <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="zap" width="14"></i> Intervensi</h4>
-                                <div class="flex flex-wrap gap-2">
-                                    ${Array.isArray(a.intervention) && a.intervention.length ? a.intervention.map(i => `<span class="bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-500/10">${i}</span>`).join('') : '<span class="text-xs italic text-white/20">-</span>'}
+                    <!-- Intervention & Plan (The Footer of the Slide) -->
+                    <div class="bg-gradient-to-br from-indigo-500/10 via-slate-800/40 to-slate-900 border border-indigo-400/20 rounded-[3rem] p-10 shadow-2xl">
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-10">
+                            <div class="space-y-6">
+                                <h4 class="text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><i data-lucide="zap" width="16" stroke-width="3"></i> Intervensi Fisioterapi</h4>
+                                <div class="flex flex-wrap gap-2.5">
+                                    ${Array.isArray(a.intervention) && a.intervention.length ? a.intervention.map(i => `<span class="bg-indigo-500/20 text-indigo-200 px-4 py-2 rounded-2xl text-xs font-black border border-indigo-500/10 shadow-sm">${i}</span>`).join('') : '<span class="text-xs italic text-white/20">-</span>'}
                                 </div>
                             </div>
-                            <div class="bg-white/5 p-6 rounded-3xl border border-white/5">
-                                <h4 class="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2"><i data-lucide="line-chart" width="14"></i> Evaluation & Plan</h4>
-                                <div class="space-y-3">
-                                    ${Array.isArray(a.eval) && a.eval.length ? a.eval.map(e => `<div class="text-xs text-white/80 flex items-start gap-2"><i data-lucide="check-circle" width="14" class="text-emerald-500 mt-0.5 shrink-0"></i> <span>${e}</span></div>`).join('') : '<p class="text-xs italic text-white/20">Empty</p>'}
-                                    <div class="mt-4 pt-4 border-t border-white/10">
-                                        <p class="text-[9px] text-white/30 uppercase font-black mb-1">Rencana Lanjut</p>
-                                        <p class="text-xs font-bold text-emerald-400">${a.plan || '-'}</p>
+                            <div class="bg-white/5 p-8 rounded-[2rem] border border-white/5 backdrop-blur-sm self-start">
+                                <h4 class="text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><i data-lucide="trending-up" width="16" stroke-width="3"></i> Evaluasi & Rencana</h4>
+                                <div class="space-y-4">
+                                    ${Array.isArray(a.eval) && a.eval.length ? a.eval.map(e => `
+                                        <div class="text-[13px] text-white/80 flex items-start gap-3 leading-relaxed">
+                                            <i data-lucide="check-circle-2" width="16" class="text-emerald-500 mt-0.5 shrink-0"></i> 
+                                            <span>${e}</span>
+                                        </div>`).join('') : '<p class="text-xs italic text-white/10">Belum ada catatan evaluasi.</p>'}
+                                    
+                                    <div class="mt-6 pt-6 border-t border-white/10">
+                                        <p class="text-[10px] text-white/30 uppercase font-black tracking-widest mb-2">Next Step Plan</p>
+                                        <p class="text-sm font-black text-emerald-400 tracking-tight">${a.plan || '-'}</p>
                                     </div>
                                 </div>
                             </div>
