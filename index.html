@@ -216,29 +216,6 @@
       </div>
    </div>
 
-   <div id="sync-toast"
-      class="hidden fixed bottom-5 right-5 z-[10000] bg-white border-l-4 border-yellow-500 rounded-lg shadow-2xl p-4 max-w-sm animate-bounce-short">
-      <div class="flex items-start gap-3">
-         <div class="bg-yellow-100 p-2 rounded-full text-yellow-600">
-            <i data-lucide="refresh-cw" width="20"></i>
-         </div>
-         <div>
-            <h4 class="font-bold text-slate-800 text-sm">Sinkronisasi Data</h4>
-            <p class="text-xs text-slate-500 mt-1 mb-3">Pastikan data di aplikasi sama dengan Google Sheet terbaru.</p>
-            <div class="flex gap-2">
-               <button type="button" onclick="pullDataFromSheet(); closeSyncToast()"
-                  class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors shadow-md">
-                  Tarik Data Sekarang
-               </button>
-               <button type="button" onclick="closeSyncToast()"
-                  class="text-xs text-slate-400 font-bold hover:text-slate-600 px-2 py-1.5">
-                  Nanti Saja
-               </button>
-            </div>
-         </div>
-      </div>
-   </div>
-
    <div id="toast-container"
       class="fixed top-5 left-1/2 -translate-x-1/2 z-[9999999999] flex flex-col gap-3 w-full max-w-xs pointer-events-none">
    </div>
@@ -247,7 +224,7 @@
    <script src="data.js?v=5.4.1"></script>
    <script src="db.js?v=1.0"></script>
    <script src="config.js?v=5.4.1"></script>
-   <script src="app.js?v=5.5.4"></script>
+   <script src="app.js?v=5.5.5"></script>
 
 </body>
 
