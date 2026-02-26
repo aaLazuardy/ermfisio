@@ -353,30 +353,35 @@ body.print-relaxed .gap-6 {
 .case-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 16px;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
   white-space: nowrap;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .case-tab:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 .case-tab.active {
-  background: #3b82f6;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #fff;
-  border-color: #3b82f6;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow:
+    0 10px 25px -5px rgba(59, 130, 246, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .nav-btn {
