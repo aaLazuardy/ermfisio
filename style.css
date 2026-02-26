@@ -16,6 +16,44 @@
   background-color: #94a3b8;
 }
 
+/* --- HISTORY AUTO-HIDE NAV --- */
+.auto-hide-nav {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.auto-hide-nav.hidden-bar-top {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.auto-hide-nav.hidden-bar-bottom {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- CLEAN SURFACE STYLES --- */
+.history-card {
+  background: #1e293b;
+  /* Solid slate-800 */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.history-card-accent {
+  background: #0f172a;
+  /* Solid slate-900 */
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.history-surface {
+  background: #020617;
+  /* Solid slate-950 */
+}
+
 .custom-scroll::-webkit-scrollbar {
   height: 8px;
   width: 8px;
