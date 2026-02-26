@@ -1522,7 +1522,7 @@ function renderAssessmentList(container) {
         const p = state.patients.find(pt => pt.id === a.patientId);
         return `<tr class="hover:bg-blue-50 transition-colors">
                                 <td class="p-4 text-center"><input type="checkbox" class="sel-check accent-blue-600 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></td>
-                                <td class="p-4 font-mono text-xs text-slate-500">${formatDate(a.date)}</td>
+                                <td class="p-4 font-mono text-xs text-slate-500">${formatDateForDisplay(a.date)}</td>
                                 <td class="p-4 font-bold text-slate-800">${p ? p.name : '?'}</td>
                                 <td class="p-4"><span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs border border-blue-200 font-medium">${a.diagnosis}</span></td>
                                 <td class="p-4 flex justify-center gap-2">
@@ -1541,7 +1541,7 @@ function renderAssessmentList(container) {
         return `<div class="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
                         <div class="pt-1"><input type="checkbox" class="sel-check w-5 h-5 accent-blue-600 rounded border-slate-300 cursor-pointer" value="${a.id}" onchange="updatePrintSelection()"></div>
                         <div class="flex-1">
-                            <div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-800 text-sm line-clamp-1">${p ? p.name : '?'}</h4><span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${formatDate(a.date)}</span></div>
+                            <div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-800 text-sm line-clamp-1">${p ? p.name : '?'}</h4><span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${formatDateForDisplay(a.date)}</span></div>
                             <div class="mb-3"><span class="inline-block bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] border border-blue-100 font-bold mb-1">${a.diagnosis}</span></div>
                             <div class="flex gap-2">
                                 <button onclick="viewSinglePrint('${a.id}')" class="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-100 flex justify-center items-center gap-1"><i data-lucide="eye" width="14"></i> Lihat</button>
