@@ -2251,7 +2251,7 @@ function renderHistoryView(container) {
         <div class="bg-slate-900 flex flex-col h-screen w-full overflow-hidden text-white relative history-surface" id="history-full-view">
             
             <!-- Fixed Header (No Auto-Hide) -->
-            <div id="sticky-header" class="shrink-0 px-8 py-6 bg-slate-900 border-b border-white/5 flex flex-col gap-5 z-[100] shadow-xl">
+            <div id="sticky-header" class="shrink-0 px-8 py-3 md:py-4 bg-slate-900 border-b border-white/5 flex flex-col gap-3 z-[100] shadow-xl">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-6">
                         <button onclick="navigate('assessments')" class="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10 group">
@@ -2293,7 +2293,7 @@ function renderHistoryView(container) {
             </div>
 
             <!-- Scrollable Report View -->
-            <div class="flex-1 overflow-y-auto custom-scroll bg-slate-900 p-8 md:p-12 lg:p-16 scroll-smooth" id="report-stack-container">
+            <div class="flex-1 overflow-y-auto custom-scroll bg-slate-900 p-4 md:p-8 lg:p-10 scroll-smooth" id="report-stack-container">
             </div>
 
         </div>
@@ -2371,10 +2371,10 @@ function renderVerticalHistory() {
                                 <div class="mt-8 w-full">
                                     <div class="flex justify-between items-end mb-2">
                                         <span class="text-[10px] font-bold text-slate-400 uppercase">VAS Intensity</span>
-                                        <span class="text-3xl font-black text-slate-800">${a.pain_vas}<span class="text-xs text-slate-300 ml-1">/10</span></span>
+                                        <span class="text-3xl font-black text-slate-800">${a.pain_vas || 0}<span class="text-xs text-slate-300 ml-1">/10</span></span>
                                     </div>
                                     <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                                        <div class="h-full bg-red-500 rounded-full" style="width: ${a.pain_vas * 10}%"></div>
+                                        <div class="h-full bg-red-500 rounded-full" style="width: ${(a.pain_vas || 0) * 10}%"></div>
                                     </div>
                                 </div>
                             </div>
