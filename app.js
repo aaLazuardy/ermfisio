@@ -2407,7 +2407,7 @@ function updateSliderUI() {
                         <div class="w-px h-16 bg-white/10 mx-2"></div>
                         <div class="text-left">
                             <p class="text-white/30 text-[11px] font-black uppercase tracking-[0.2em] mb-1">Tanggal Pemeriksaan</p>
-                            <p class="text-3xl font-bold text-white tracking-tight leading-tight">${formatDate(a.date)}</p>
+                            <p class="text-3xl font-bold text-white tracking-tight leading-tight">${formatDateForDisplay(a.date)}</p>
                         </div>
                     </div>
 
