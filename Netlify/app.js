@@ -3739,6 +3739,18 @@ function renderPrintView(container) {
         return generateSingleAssessmentHTML(a, p);
     }).join('');
 
+    let docTitle = 'Laporan_Assessment';
+    if (targets.length === 1) {
+        const a = targets[0];
+        const p = state.patients.find(pt => pt.id === a.patientId);
+        const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.name || 'Pasien');
+        const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
+        const sessionNum = pAppts.findIndex(x => x.id === a.id) + 1;
+        const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
+        docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
+    }
+    state.printDocumentTitle = docTitle;
+
     container.innerHTML = `
         <div id="preview-layer" class="min-h-screen bg-slate-700 pb-20">
             <div id="preview-controls" class="sticky top-0 z-50 bg-slate-800 text-white p-4 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 no-print">
@@ -3755,13 +3767,16 @@ function renderPrintView(container) {
 
 function handlePrintWithTip() {
     if (confirm("⚠️ TIPS PENTING:\n\n1. Cari menu 'Setelan Lain' (More Settings).\n2. Ubah SKALA menjadi 'Sesuaikan' (Fit).\n\nLanjut membuka printer?")) {
+        const oldTitle = document.title;
+        if (state.printDocumentTitle) document.title = state.printDocumentTitle;
         window.print();
+        document.title = oldTitle;
     }
 }
 
 function closePrintView() { navigate('assessments'); }
 
-function printHTML(html) {
+function printHTML(html, title = 'Document') {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -3778,7 +3793,10 @@ function printHTML(html) {
 
     iframe.contentWindow.focus();
     setTimeout(() => {
+        const originalTitle = document.title;
+        document.title = title;
         iframe.contentWindow.print();
+        document.title = originalTitle;
         setTimeout(() => document.body.removeChild(iframe), 1000);
     }, 500);
 }
@@ -5432,7 +5450,7 @@ function openReceiptPreview(apptId, type) {
                         <option value="A4">Kertas Invoice (A4)</option>
                     </select>
                 </div>
-                <button onclick="executeReceiptPrint()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/50 flex items-center gap-2 transition-all btn-press text-sm">
+                <button onclick="executeReceiptPrint('${apptId}')" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/50 flex items-center gap-2 transition-all btn-press text-sm">
                     <i data-lucide="printer" width="18"></i> Cetak Sekarang
                 </button>
             </div>
@@ -5475,13 +5493,31 @@ function updateReceiptPreviewIframe(apptId, type) {
     }, 50);
 }
 
-function executeReceiptPrint() {
+function executeReceiptPrint(apptId) {
     const iframe = document.getElementById('receipt-preview-iframe');
     if (!iframe) return;
 
+    let docTitle = 'Struk_Pembayaran';
+    if (apptId) {
+        const a = (state.appointments || []).find(x => x.id === apptId) || (state.assessments || []).find(x => x.id === apptId);
+        if (a) {
+            const p = (state.patients || []).find(pt => pt.id === a.patientId);
+            const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.visitor_name || a.name || 'Pasien');
+            const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
+            let sessionNum = pAppts.findIndex(x => x.id === apptId) + 1;
+            if (sessionNum === 0) sessionNum = pAppts.length + 1; // Not yet saved as assessment
+            const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
+            const dateStr = (a.date || '').replace(/[^0-9-]/g, '');
+            docTitle = `${nama}-${diag}-PertemuanKe${sessionNum}-${dateStr}`;
+        }
+    }
+
     const cw = iframe.contentWindow;
+    const oldTitle = document.title;
+    document.title = docTitle;
     cw.focus();
     cw.print();
+    document.title = oldTitle;
 }
 
 function printReceipt(apptId, type) {
@@ -5839,7 +5875,8 @@ function printJournalReport(mode = 'GENERAL') {
         </body>
         </html>
     `;
-    printHTML(html);
+    const docTitle = `Laporan_Kasir_Pajak_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
+    printHTML(html, docTitle);
 }
 
 function printAppointmentReport() {
@@ -5932,7 +5969,8 @@ function printAppointmentReport() {
         </body>
         </html>
     `;
-    printHTML(html);
+    const docTitle = `Laporan_Kunjungan_Klinik_${from}_SD_${to}`;
+    printHTML(html, docTitle);
 }
 
 
