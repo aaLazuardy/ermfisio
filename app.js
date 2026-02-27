@@ -3806,7 +3806,7 @@ function printHTML(html) {
     }, 500);
 }
 
-function generateReceiptHTML(apptId, type = 'RECEIPT') {
+function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
     const a = (state.appointments || []).find(x => x.id === apptId);
     if (!a) return '';
     const p = (state.patients || []).find(pt => pt.id === a.patientId);
@@ -3826,27 +3826,137 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
 
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
     const now = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const qrHTML = (method === 'QRIS' && qrisImg) ? `
+        <div class="qr-container">
+            <p class="bold qr-title">SCAN UNTUK BAYAR (QRIS)</p>
+            <img src="${qrisImg}" class="qr-image" />
+            <p class="qr-price">Harga: <span class="bold">${formatRp(finalAmount)}</span></p>
+        </div>
+    ` : '';
+
+    if (paperSize === 'A4') {
+        return `
+        <html>
+        <head>
+            <style>
+                @page { size: A4 portrait; margin: 15mm; }
+                body { 
+                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+                    color: #333; 
+                    line-height: 1.5; 
+                    margin: 0; padding: 0; 
+                }
+                .container { width: 100%; max-width: 800px; margin: 0 auto; }
+                .header { border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+                .clinic-name { font-size: 24pt; font-weight: bold; color: #2563eb; text-transform: uppercase; margin:0;}
+                .clinic-sub { font-size: 10pt; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+                .address { font-size: 9pt; color: #64748b; margin-top: 5px; }
+                .title { font-size: 20pt; font-weight: bold; color: #1e293b; text-transform: uppercase; text-align: right; margin:0;}
+                .info-box { display: flex; justify-content: space-between; margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+                .info-col { width: 48%; }
+                .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 10pt; }
+                .info-label { color: #64748b; font-weight: bold; width: 120px; }
+                .info-val { font-weight: 500; color: #333; flex: 1; text-align: right; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                th { background: #f1f5f9; text-align: left; padding: 12px; font-size: 10pt; color: #475569; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; }
+                td { padding: 15px 12px; border-bottom: 1px solid #e2e8f0; font-size: 10pt; color: #333; }
+                .right { text-align: right; }
+                .bold { font-weight: bold; }
+                .total-box { width: 300px; float: right; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 30px;}
+                .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 11pt; }
+                .total-final { font-size: 16pt; font-weight: bold; color: #2563eb; border-top: 1px solid #cbd5e1; padding-top: 10px; margin-top: 10px; }
+                .clear { clear: both; }
+                .footer { border-top: 1px solid #eee; padding-top: 20px; margin-top: 50px; text-align: center; color: #64748b; font-size: 9pt; }
+                
+                .qr-container { text-align: center; margin-top: 20px; border: 1px dashed #cbd5e1; padding: 20px; border-radius: 8px; background: #fff; width: 250px; margin: 0 auto 30px auto; clear:both; }
+                .qr-title { font-size: 10pt; font-weight: bold; color: #334155; margin-bottom: 10px; }
+                .qr-image { width: 150px; height: 150px; margin: 0 auto; display: block;}
+                .qr-price { font-size: 12pt; margin-top: 10px; color: #2563eb; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div>
+                        <h1 class="clinic-name">${state.clinicInfo.name || 'FISIOTA'}</h1>
+                        <div class="clinic-sub">${state.clinicInfo.subname || ''}</div>
+                        <div class="address">${state.clinicInfo.address || ''}<br>WA: ${state.clinicInfo.phone || ''}</div>
+                    </div>
+                    <div>
+                        <h2 class="title">${type === 'BILL' ? 'INVOICE / TAGIHAN' : 'KUITANSI LUNAS'}</h2>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-col">
+                        <div class="info-row"><span class="info-label">Pasien:</span> <span class="info-val" style="text-align: left">${nama}</span></div>
+                        <div class="info-row"><span class="info-label">Tgl Kunjungan:</span> <span class="info-val" style="text-align: left">${a.date}</span></div>
+                    </div>
+                    <div class="info-col">
+                        <div class="info-row"><span class="info-label">Tgl Cetak:</span> <span class="info-val">${now}</span></div>
+                        <div class="info-row"><span class="info-label">Status:</span> <span class="info-val" style="color: ${type === 'RECEIPT' ? '#16a34a' : '#dc2626'}">${type === 'BILL' ? (method === 'QRIS' ? 'MENUNGGU SCAN' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
+                        <div class="info-row"><span class="info-label">Metode:</span> <span class="info-val">${method}</span></div>
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Deskripsi Layanan</th>
+                            <th class="right">Harga</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${a.diagnosis || 'Layanan Fisioterapi'}</td>
+                            <td class="right">${formatRp(feeBase)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="total-box">
+                    <div class="total-row"><span>Subtotal</span> <span class="bold">${formatRp(feeBase)}</span></div>
+                    ${discount > 0 ? `<div class="total-row text-red-600" style="color:#dc2626"><span>Diskon</span> <span>-${formatRp(discount)}</span></div>` : ''}
+                    <div class="total-row total-final"><span>TOTAL</span> <span>${formatRp(finalAmount)}</span></div>
+                </div>
+                <div class="clear"></div>
+
+                ${qrHTML}
+
+                <div class="footer">
+                    <p class="bold" style="color:#334155; font-size:11pt; margin-bottom:5px;">${type === 'RECEIPT' ? 'Terima kasih atas kunjungan Anda.' : 'Harap segera melakukan pembayaran.'}</p>
+                    <p>Semoga lekas membaik dan sehat selalu.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+    }
+
+    const wConfig = paperSize === '80mm' ? { paper: '80mm', content: '74mm', fontSize: '10pt', qrSize: '50mm', lineW: '70%' } : { paper: '58mm', content: '54mm', fontSize: '9pt', qrSize: '40mm', lineW: '65%' };
+
     return `
     <html>
     <head>
         <style>
             @page { 
-                size: 58mm auto; 
+                size: ${wConfig.paper} auto; 
                 margin: 0; 
             }
             body { 
-                width: 58mm; 
+                width: ${wConfig.paper}; 
                 margin: 0; 
                 padding: 2mm;
                 font-family: 'Courier New', Courier, monospace; 
-                font-size: 9pt; 
+                font-size: ${wConfig.fontSize}; 
                 line-height: 1.2; 
                 color: #000;
                 background: #fff;
             }
             @media print {
-                html, body { width: 58mm; margin: 0; padding: 0; }
-                .print-content { width: 54mm; margin: 0 auto; padding: 2mm 0; }
+                html, body { width: ${wConfig.paper}; margin: 0; padding: 0; }
+                .print-content { width: ${wConfig.content}; margin: 0 auto; padding: 2mm 0; }
             }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
@@ -3858,12 +3968,14 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
             .clinic-sub { font-size: 7pt; margin-bottom: 5px; }
             .receipt-type { font-size: 10pt; padding: 4px 0; margin: 8px 0; border: 1px solid #000; background: #eee !important; -webkit-print-color-adjust: exact; }
             .qr-container { margin: 10px 0; text-align: center; }
-            .qr-image { width: 40mm; height: 40mm; border: 1px solid #eee; padding: 1mm; background: #fff; }
+            .qr-title { font-size: 8pt; margin-bottom: 6px; }
+            .qr-image { width: ${wConfig.qrSize}; height: ${wConfig.qrSize}; border: 1px solid #eee; padding: 1mm; background: #fff; display: inline-block; }
+            .qr-price { font-size: 8pt; margin-top: 6px; }
             .footer { font-size: 7pt; margin-top: 10px; }
             .item-row { margin: 2px 0; }
         </style>
     </head>
-    <body onload="window.print()">
+    <body>
         <div class="print-content">
             <div class="text-center">
                 <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
@@ -3886,7 +3998,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
             
             <div class="bold uppercase" style="font-size: 8pt; margin-bottom: 4px;">Rincian Layanan</div>
             <div class="item-row flex" style="font-size: 8pt;">
-                <span style="max-width: 65%;">${a.diagnosis || 'Layanan Fisioterapi'}</span>
+                <span style="max-width: ${wConfig.lineW};">${a.diagnosis || 'Layanan Fisioterapi'}</span>
                 <span>${formatRp(feeBase)}</span>
             </div>
             
@@ -3904,13 +4016,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT') {
             <div class="flex" style="font-size: 8pt;"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
             <div class="flex" style="font-size: 8pt;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
 
-            ${(type === 'BILL' && method === 'QRIS' && qrisImg) ? `
-                <div class="qr-container">
-                    <p class="bold" style="font-size: 8pt; margin-bottom: 6px;">SCAN UNTUK BAYAR (QRIS)</p>
-                    <img src="${qrisImg}" class="qr-image" />
-                    <p style="font-size: 8pt; margin-top: 6px;">Harga: <span class="bold">${formatRp(finalAmount)}</span></p>
-                </div>
-            ` : ''}
+            ${qrHTML}
 
             <div class="footer text-center">
                 ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 9pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 9pt;">BUKTI TAGIHAN</p><p>Harap disimpan</p>'}
@@ -5386,9 +5492,81 @@ async function confirmPayment(apptId) {
     autoSyncPayment(a);
 }
 
+function openReceiptPreview(apptId, type) {
+    if (document.getElementById('receipt-preview-overlay')) {
+        document.getElementById('receipt-preview-overlay').remove();
+    }
+    const overlay = document.createElement('div');
+    overlay.id = 'receipt-preview-overlay';
+    overlay.className = 'fixed inset-0 z-[100000] bg-slate-200 flex flex-col items-center p-4 md:p-10';
+    overlay.innerHTML = `
+        <div class="w-full max-w-4xl flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <button onclick="document.getElementById('receipt-preview-overlay').remove()" class="px-5 py-2.5 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold flex items-center gap-2 transition-all text-sm shadow-sm">
+                <i data-lucide="arrow-left" width="18"></i> Kembali
+            </button>
+            <div class="flex gap-4 items-center flex-wrap justify-end">
+                <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+                    <span class="text-xs font-bold text-slate-500 uppercase">Format:</span>
+                    <select id="receipt-paper-size" onchange="updateReceiptPreviewIframe('${apptId}', '${type}')" class="px-4 py-2 bg-blue-50 border-2 border-blue-200 text-blue-800 rounded-xl outline-none focus:border-blue-500 font-bold text-sm shadow-sm w-full sm:w-auto">
+                        <option value="58mm">Struk Kertas 58mm</option>
+                        <option value="80mm">Struk Kertas 80mm</option>
+                        <option value="A4">Kertas Invoice (A4)</option>
+                    </select>
+                </div>
+                <button onclick="executeReceiptPrint()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/50 flex items-center gap-2 transition-all btn-press text-sm">
+                    <i data-lucide="printer" width="18"></i> Cetak Sekarang
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 w-full max-w-4xl relative">
+            <div class="absolute inset-0 flex justify-center items-start overflow-y-auto pb-10 custom-scrollbar">
+                <iframe id="receipt-preview-iframe" class="bg-white shadow-2xl rounded-sm transition-all duration-300 transform origin-top shrink-0" style="min-height: 500px;"></iframe>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons({ root: overlay });
+    updateReceiptPreviewIframe(apptId, type);
+}
+
+function updateReceiptPreviewIframe(apptId, type) {
+    const paperSize = document.getElementById('receipt-paper-size').value;
+    const iframe = document.getElementById('receipt-preview-iframe');
+
+    // adjust iframe size visually based on paper
+    if (paperSize === '58mm') {
+        iframe.style.width = '260px';
+        iframe.style.minHeight = '400px';
+    } else if (paperSize === '80mm') {
+        iframe.style.width = '350px';
+        iframe.style.minHeight = '500px';
+    } else if (paperSize === 'A4') {
+        iframe.style.width = '100%';
+        iframe.style.maxWidth = '800px';
+        iframe.style.minHeight = '1000px';
+    }
+
+    // Slight delay to allow reflow, so transition applies
+    setTimeout(() => {
+        const html = generateReceiptHTML(apptId, type, paperSize);
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(html);
+        doc.close();
+    }, 50);
+}
+
+function executeReceiptPrint() {
+    const iframe = document.getElementById('receipt-preview-iframe');
+    if (!iframe) return;
+
+    const cw = iframe.contentWindow;
+    cw.focus();
+    cw.print();
+}
+
 function printReceipt(apptId, type) {
-    const html = generateReceiptHTML(apptId, type);
-    if (html) printHTML(html);
+    openReceiptPreview(apptId, type);
 }
 
 function renderKasirPajak(formatRp) {
