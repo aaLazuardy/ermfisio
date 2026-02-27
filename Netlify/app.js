@@ -3815,9 +3815,14 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
                     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
                     color: #333; 
                     line-height: 1.5; 
-                    margin: 0; padding: 0; 
+                    margin: 0; padding: 20px; 
+                    background: #f1f5f9;
                 }
-                .container { width: 100%; max-width: 800px; margin: 0 auto; }
+                .container { width: 100%; max-width: 800px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+                @media print {
+                    body { padding: 0; background: #fff; }
+                    .container { box-shadow: none; padding: 0; width: 100%; max-width: 100%; }
+                }
                 .header { border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
                 .clinic-name { font-size: 24pt; font-weight: bold; color: #2563eb; text-transform: uppercase; margin:0;}
                 .clinic-sub { font-size: 10pt; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
@@ -3915,20 +3920,40 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
                 margin: 0; 
             }
             body { 
-                width: ${wConfig.paper}; 
+                width: 100%; 
                 margin: 0; 
+                background: #f8fafc;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 20px 0;
+            }
+            .paper-preview {
+                width: ${wConfig.paper}; 
+                background: #fff;
                 padding: ${wConfig.padding} ${wConfig.padding};
                 box-sizing: border-box;
                 font-family: 'Courier New', Courier, monospace; 
                 font-size: ${wConfig.fontSize}; 
                 line-height: 1.25; 
                 color: #000;
-                background: #fff;
+                box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             }
             @media print {
-                html, body { width: ${wConfig.paper}; margin: 0; padding: ${wConfig.padding} ${wConfig.padding}; box-sizing: border-box; }
-                .print-content { width: 100%; margin: 0; padding: 0; }
-            }
+                html, body { 
+                    width: ${wConfig.paper}; 
+                    margin: 0; 
+                    padding: 0; 
+                    background: #fff;
+                    display: block;
+                }
+                .paper-preview {
+                    width: ${wConfig.paper}; 
+                    margin: 0 auto; 
+                    padding: ${wConfig.padding} ${wConfig.padding}; 
+                    box-sizing: border-box;
+                    box-shadow: none;
+                }
             .print-content { width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
@@ -3948,9 +3973,10 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
         </style>
     </head>
     <body>
-        <div class="print-content">
-            <div class="text-center">
-                <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
+        <div class="paper-preview">
+            <div class="print-content">
+                <div class="text-center">
+                    <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
                 <div class="clinic-sub uppercase">${state.clinicInfo.subname || ''}</div>
                 <div style="font-size: 7pt; max-width: 95%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
                 <div style="font-size: 8pt;">WA: ${state.clinicInfo.phone || ''}</div>
@@ -3994,6 +4020,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
                 ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 9pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 9pt;">BUKTI TAGIHAN</p><p>Harap disimpan</p>'}
                 <div class="dashed-line"></div>
                 <p style="font-size: 6pt;">E-Receipt by FISIOTA.com</p>
+            </div>
             </div>
         </div>
     </body>
