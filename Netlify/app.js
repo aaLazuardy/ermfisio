@@ -3750,9 +3750,15 @@ function renderPrintView(container) {
         docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
     }
     state.printDocumentTitle = docTitle;
+    state.originalDocumentTitle = document.title;
+    document.title = docTitle; // Set it immediately so it stays active during preview
 
     container.innerHTML = `
         <div id="preview-layer" class="min-h-screen bg-slate-700 pb-20">
+            <style type="text/css" media="print">
+                @page { size: auto; margin: 0mm !important; }
+                body { margin: 0 !important; }
+            </style>
             <div id="preview-controls" class="sticky top-0 z-50 bg-slate-800 text-white p-4 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 no-print">
                 <div><h2 class="text-lg font-bold">Print Preview</h2><p class="text-xs text-slate-400">Total: ${targets.length} Dokumen</p></div>
                 <div class="flex gap-3">
@@ -3767,19 +3773,20 @@ function renderPrintView(container) {
 
 function handlePrintWithTip() {
     if (confirm("⚠️ TIPS PENTING:\n\n1. Cari menu 'Setelan Lain' (More Settings).\n2. Ubah SKALA menjadi 'Sesuaikan' (Fit).\n\nLanjut membuka printer?")) {
-        const oldTitle = document.title;
-        if (state.printDocumentTitle) document.title = state.printDocumentTitle;
         window.print();
-        document.title = oldTitle;
     }
 }
 
-function closePrintView() { navigate('assessments'); }
+function closePrintView() {
+    if (state.originalDocumentTitle) document.title = state.originalDocumentTitle;
+    navigate('assessments');
+}
 
 function printHTML(html, title = 'Document') {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
+    // ... rest doesn't matter, just match lines
     iframe.style.bottom = '0';
     iframe.style.width = '0';
     iframe.style.height = '0';
@@ -3788,16 +3795,22 @@ function printHTML(html, title = 'Document') {
 
     const doc = iframe.contentWindow.document;
     doc.open();
-    doc.write(html);
+    // Inject margin 0mm inside iframe to hide headers
+    const styledHtml = `<style type="text/css" media="print">@page { margin: 0mm !important; } body{ margin: 0 !important;}</style>` + html;
+    doc.write(styledHtml);
     doc.close();
 
     iframe.contentWindow.focus();
     setTimeout(() => {
-        const originalTitle = document.title;
+        state.originalDocumentTitle = document.title;
         document.title = title;
         iframe.contentWindow.print();
-        document.title = originalTitle;
-        setTimeout(() => document.body.removeChild(iframe), 1000);
+
+        // Restore after print dialog closes and a small delay
+        setTimeout(() => {
+            if (state.originalDocumentTitle) document.title = state.originalDocumentTitle;
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        }, 1000);
     }, 500);
 }
 
@@ -5433,12 +5446,14 @@ function openReceiptPreview(apptId, type) {
     if (document.getElementById('receipt-preview-overlay')) {
         document.getElementById('receipt-preview-overlay').remove();
     }
+    state.originalDocumentTitle = document.title; // Save original title
+
     const overlay = document.createElement('div');
     overlay.id = 'receipt-preview-overlay';
     overlay.className = 'fixed inset-0 z-[100000] bg-slate-200 flex flex-col items-center p-4 md:p-10';
     overlay.innerHTML = `
         <div class="w-full max-w-4xl flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-            <button onclick="document.getElementById('receipt-preview-overlay').remove()" class="px-5 py-2.5 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold flex items-center gap-2 transition-all text-sm shadow-sm">
+            <button onclick="closeReceiptPreview()" class="px-5 py-2.5 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold flex items-center gap-2 transition-all text-sm shadow-sm">
                 <i data-lucide="arrow-left" width="18"></i> Kembali
             </button>
             <div class="flex gap-4 items-center flex-wrap justify-end">
@@ -5513,11 +5528,19 @@ function executeReceiptPrint(apptId) {
     }
 
     const cw = iframe.contentWindow;
-    const oldTitle = document.title;
-    document.title = docTitle;
+    cw.document.title = docTitle;
+    document.title = docTitle; // Update parent title too
     cw.focus();
     cw.print();
-    document.title = oldTitle;
+    // Do NOT restore immediately. It will be restored when closeReceiptPreview is clicked.
+}
+
+function closeReceiptPreview() {
+    if (state.originalDocumentTitle) {
+        document.title = state.originalDocumentTitle;
+    }
+    const overlay = document.getElementById('receipt-preview-overlay');
+    if (overlay) overlay.remove();
 }
 
 function printReceipt(apptId, type) {
