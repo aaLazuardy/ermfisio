@@ -3739,20 +3739,6 @@ function renderPrintView(container) {
         return generateSingleAssessmentHTML(a, p);
     }).join('');
 
-    let docTitle = 'Laporan_Assessment';
-    if (targets.length === 1) {
-        const a = targets[0];
-        const p = state.patients.find(pt => pt.id === a.patientId);
-        const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.name || 'Pasien');
-        const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
-        const sessionNum = pAppts.findIndex(x => x.id === a.id) + 1;
-        const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
-        docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
-    }
-    state.printDocumentTitle = docTitle;
-    state.originalDocumentTitle = document.title;
-    document.title = docTitle; // Set it immediately so it stays active during preview
-
     container.innerHTML = `
         <div id="preview-layer" class="min-h-screen bg-slate-700 pb-20">
             <style type="text/css" media="print">
@@ -3773,7 +3759,12 @@ function renderPrintView(container) {
 
 function handlePrintWithTip() {
     if (confirm("⚠️ TIPS PENTING:\n\n1. Cari menu 'Setelan Lain' (More Settings).\n2. Ubah SKALA menjadi 'Sesuaikan' (Fit).\n\nLanjut membuka printer?")) {
-        window.print();
+        const titleBackup = document.title;
+        if (state.printDocumentTitle) document.title = state.printDocumentTitle;
+        setTimeout(() => {
+            window.print();
+            document.title = titleBackup;
+        }, 100);
     }
 }
 
@@ -3802,15 +3793,15 @@ function printHTML(html, title = 'Document') {
 
     iframe.contentWindow.focus();
     setTimeout(() => {
-        state.originalDocumentTitle = document.title;
+        const titleBackup = document.title;
         document.title = title;
-        iframe.contentWindow.print();
-
-        // Restore after print dialog closes and a small delay
         setTimeout(() => {
-            if (state.originalDocumentTitle) document.title = state.originalDocumentTitle;
-            if (document.body.contains(iframe)) document.body.removeChild(iframe);
-        }, 1000);
+            iframe.contentWindow.print();
+            document.title = titleBackup;
+            setTimeout(() => {
+                if (document.body.contains(iframe)) document.body.removeChild(iframe);
+            }, 1000);
+        }, 100);
     }, 500);
 }
 
@@ -5446,7 +5437,6 @@ function openReceiptPreview(apptId, type) {
     if (document.getElementById('receipt-preview-overlay')) {
         document.getElementById('receipt-preview-overlay').remove();
     }
-    state.originalDocumentTitle = document.title; // Save original title
 
     const overlay = document.createElement('div');
     overlay.id = 'receipt-preview-overlay';
@@ -5528,17 +5518,17 @@ function executeReceiptPrint(apptId) {
     }
 
     const cw = iframe.contentWindow;
+    const titleBackup = document.title;
+    document.title = docTitle;
     cw.document.title = docTitle;
-    document.title = docTitle; // Update parent title too
     cw.focus();
-    cw.print();
-    // Do NOT restore immediately. It will be restored when closeReceiptPreview is clicked.
+    setTimeout(() => {
+        cw.print();
+        document.title = titleBackup;
+    }, 100);
 }
 
 function closeReceiptPreview() {
-    if (state.originalDocumentTitle) {
-        document.title = state.originalDocumentTitle;
-    }
     const overlay = document.getElementById('receipt-preview-overlay');
     if (overlay) overlay.remove();
 }
@@ -5898,8 +5888,7 @@ function printJournalReport(mode = 'GENERAL') {
         </body>
         </html>
     `;
-    const docTitle = `Laporan_Kasir_Pajak_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
-    printHTML(html, docTitle);
+    printHTML(html);
 }
 
 function printAppointmentReport() {
@@ -5992,8 +5981,7 @@ function printAppointmentReport() {
         </body>
         </html>
     `;
-    const docTitle = `Laporan_Kunjungan_Klinik_${from}_SD_${to}`;
-    printHTML(html, docTitle);
+    printHTML(html);
 }
 
 
