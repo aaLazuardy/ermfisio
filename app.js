@@ -3778,11 +3778,23 @@ function downloadPDFWithHtml2Pdf(type, apptId = null) {
     let element, opt;
 
     if (type === 'assessment') {
-        element = document.querySelector('#preview-layer .flex-col');
+        element = document.querySelector('#preview-layer > div:last-child');
         if (!element) return;
+
+        let docTitle = 'Laporan_Assessment';
+        if (state.currentAssessment) {
+            const a = state.currentAssessment;
+            const p = state.patients.find(pt => pt.id === a.patientId);
+            const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.name || 'Pasien');
+            const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
+            const sessionNum = pAppts.findIndex(x => x.id === a.id) + 1;
+            const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
+            docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
+        }
+
         opt = {
             margin: 10,
-            filename: (state.printDocumentTitle || 'Laporan_Assessment') + '.pdf',
+            filename: docTitle + '.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
