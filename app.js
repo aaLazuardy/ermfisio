@@ -3805,188 +3805,109 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
 
     const qrHTML = '';
 
-    if (paperSize === 'A4') {
-        return `
-        <html>
-        <head>
-            <style>
-                @page { size: A4 portrait; margin: 15mm; }
-                body { 
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-                    color: #333; 
-                    line-height: 1.5; 
-                    margin: 0; padding: 20px; 
-                    background: #f1f5f9;
-                }
-                .container { width: 100%; max-width: 800px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-                @media print {
-                    body { padding: 0; background: #fff; }
-                    .container { box-shadow: none; padding: 0; width: 100%; max-width: 100%; }
-                }
-                .header { border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-                .clinic-name { font-size: 24pt; font-weight: bold; color: #2563eb; text-transform: uppercase; margin:0;}
-                .clinic-sub { font-size: 10pt; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
-                .address { font-size: 9pt; color: #64748b; margin-top: 5px; }
-                .title { font-size: 20pt; font-weight: bold; color: #1e293b; text-transform: uppercase; text-align: right; margin:0;}
-                .info-box { display: flex; justify-content: space-between; margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
-                .info-col { width: 48%; }
-                .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 10pt; }
-                .info-label { color: #64748b; font-weight: bold; width: 120px; }
-                .info-val { font-weight: 500; color: #333; flex: 1; text-align: right; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                th { background: #f1f5f9; text-align: left; padding: 12px; font-size: 10pt; color: #475569; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; }
-                td { padding: 15px 12px; border-bottom: 1px solid #e2e8f0; font-size: 10pt; color: #333; }
-                .right { text-align: right; }
-                .bold { font-weight: bold; }
-                .total-box { width: 300px; float: right; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 30px;}
-                .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 11pt; }
-                .total-final { font-size: 16pt; font-weight: bold; color: #2563eb; border-top: 1px solid #cbd5e1; padding-top: 10px; margin-top: 10px; }
-                .clear { clear: both; }
-                .footer { border-top: 1px solid #eee; padding-top: 20px; margin-top: 50px; text-align: center; color: #64748b; font-size: 9pt; }
-                
-                .qr-container { text-align: center; margin-top: 20px; border: 1px dashed #cbd5e1; padding: 20px; border-radius: 8px; background: #fff; width: 250px; margin: 0 auto 30px auto; clear:both; }
-                .qr-title { font-size: 10pt; font-weight: bold; color: #334155; margin-bottom: 10px; }
-                .qr-image { width: 150px; height: 150px; margin: 0 auto; display: block;}
-                .qr-price { font-size: 12pt; margin-top: 10px; color: #2563eb; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <div>
-                        <h1 class="clinic-name">${state.clinicInfo.name || 'FISIOTA'}</h1>
-                        <div class="clinic-sub">${state.clinicInfo.subname || ''}</div>
-                        <div class="address">${state.clinicInfo.address || ''}<br>WA: ${state.clinicInfo.phone || ''}</div>
-                    </div>
-                    <div>
-                        <h2 class="title">${type === 'BILL' ? 'INVOICE / TAGIHAN' : 'KUITANSI LUNAS'}</h2>
-                    </div>
-                </div>
-
-                <div class="info-box">
-                    <div class="info-col">
-                        <div class="info-row"><span class="info-label">Pasien:</span> <span class="info-val" style="text-align: left">${nama}</span></div>
-                        <div class="info-row"><span class="info-label">Tgl Kunjungan:</span> <span class="info-val" style="text-align: left">${a.date}</span></div>
-                    </div>
-                    <div class="info-col">
-                        <div class="info-row"><span class="info-label">Tgl Cetak:</span> <span class="info-val">${now}</span></div>
-                        <div class="info-row"><span class="info-label">Status:</span> <span class="info-val" style="color: ${type === 'RECEIPT' ? '#16a34a' : '#dc2626'}">${type === 'BILL' ? (method === 'QRIS' ? 'MENUNGGU SCAN' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
-                        <div class="info-row"><span class="info-label">Metode:</span> <span class="info-val">${method}</span></div>
-                    </div>
-                </div>
-
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Deskripsi Layanan</th>
-                            <th class="right">Harga</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>${a.diagnosis || 'Layanan Fisioterapi'}</td>
-                            <td class="right">${formatRp(feeBase)}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div class="total-box">
-                    <div class="total-row"><span>Subtotal</span> <span class="bold">${formatRp(feeBase)}</span></div>
-                    ${discount > 0 ? `<div class="total-row text-red-600" style="color:#dc2626"><span>Diskon</span> <span>-${formatRp(discount)}</span></div>` : ''}
-                    <div class="total-row total-final"><span>TOTAL</span> <span>${formatRp(finalAmount)}</span></div>
-                </div>
-                <div class="clear"></div>
-
-                ${qrHTML}
-
-                <div class="footer">
-                    <p class="bold" style="color:#334155; font-size:11pt; margin-bottom:5px;">${type === 'RECEIPT' ? 'Terima kasih atas kunjungan Anda.' : 'Harap segera melakukan pembayaran.'}</p>
-                    <p>Semoga lekas membaik dan sehat selalu.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        `;
-    }
-
-    const wConfig = paperSize === '80mm' ? { paper: '80mm', padding: '4mm', fontSize: '10pt', qrSize: '50mm', lineW: '70%' } : { paper: '58mm', padding: '4mm', fontSize: '9pt', qrSize: '40mm', lineW: '65%' };
+    const wConfig = paperSize === 'A4' ? {
+        page: 'A4 portrait',
+        paper: '100%',
+        maxWidth: '800px',
+        padding: '30px',
+        fontSize: '11pt',
+        qrSize: '150px',
+        lineW: '100%',
+        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+        border: 'border-bottom: 1px solid #ccc;' // Instead of dashed lines for A4
+    } : paperSize === '80mm' ? {
+        page: '80mm auto',
+        paper: '100%',
+        maxWidth: '300px',
+        padding: '15px',
+        fontSize: '10pt',
+        qrSize: '120px',
+        lineW: '100%',
+        fontFamily: "'Courier New', Courier, monospace",
+        border: 'border-top: 1px dashed #000;'
+    } : {
+        page: '58mm auto',
+        paper: '100%',
+        maxWidth: '220px',
+        padding: '10px',
+        fontSize: '9pt',
+        qrSize: '100px',
+        lineW: '100%',
+        fontFamily: "'Courier New', Courier, monospace",
+        border: 'border-top: 1px dashed #000;'
+    };
 
     return `
     <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             @page { 
-                size: ${wConfig.paper} auto; 
+                size: ${wConfig.page}; 
                 margin: 0; 
             }
             body { 
-                width: 100%; 
                 margin: 0; 
-                background: #f8fafc;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 20px 0;
+                padding: 20px;
+                background: #f1f5f9;
+                font-family: ${wConfig.fontFamily}; 
+                font-size: ${wConfig.fontSize}; 
+                color: #000;
+                line-height: 1.4;
             }
             .paper-preview {
                 width: ${wConfig.paper}; 
+                max-width: ${wConfig.maxWidth};
+                margin: 0 auto; 
                 background: #fff;
-                padding: ${wConfig.padding} ${wConfig.padding};
+                padding: ${wConfig.padding}; 
                 box-sizing: border-box;
-                font-family: 'Courier New', Courier, monospace; 
-                font-size: ${wConfig.fontSize}; 
-                line-height: 1.25; 
-                color: #000;
                 box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             }
             @media print {
                 html, body { 
-                    width: ${wConfig.paper}; 
-                    margin: 0; 
-                    padding: 0; 
                     background: #fff;
-                    display: block;
+                    padding: 0; 
+                    margin: 0;
                 }
                 .paper-preview {
-                    width: ${wConfig.paper}; 
-                    margin: 0 auto; 
-                    padding: ${wConfig.padding} ${wConfig.padding}; 
-                    box-sizing: border-box;
+                    width: 100%;
+                    max-width: 100%;
+                    margin: 0; 
+                    padding: ${wConfig.padding}; 
                     box-shadow: none;
                 }
-            .print-content { width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
+            }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .bold { font-weight: bold; }
             .uppercase { text-transform: uppercase; }
-            .dashed-line { border-top: 1px dashed #000; margin: 6px 0; }
+            .dashed-line { ${wConfig.border} margin: 10px 0; }
             .flex { display: flex; justify-content: space-between; align-items: flex-start; }
-            .clinic-name { font-size: 12pt; margin-bottom: 2px; }
-            .clinic-sub { font-size: 7pt; margin-bottom: 5px; }
-            .receipt-type { font-size: 10pt; padding: 4px 0; margin: 8px 0; border: 1px solid #000; background: #eee !important; -webkit-print-color-adjust: exact; }
-            .qr-container { margin: 10px 0; text-align: center; }
-            .qr-title { font-size: 8pt; margin-bottom: 6px; }
-            .qr-image { width: ${wConfig.qrSize}; height: ${wConfig.qrSize}; border: 1px solid #eee; padding: 1mm; background: #fff; display: inline-block; }
-            .qr-price { font-size: 8pt; margin-top: 6px; }
-            .footer { font-size: 7pt; margin-top: 10px; }
-            .item-row { margin: 2px 0; }
+            .clinic-name { font-size: 1.25em; margin-bottom: 2px; }
+            .clinic-sub { font-size: 0.8em; margin-bottom: 5px; }
+            .receipt-type { font-size: 1em; padding: 4px 0; margin: 12px 0; border: 1px solid #000; background: #eee !important; -webkit-print-color-adjust: exact; }
+            .qr-container { margin: 15px 0; text-align: center; }
+            .qr-title { font-size: 0.9em; margin-bottom: 6px; }
+            .qr-image { width: ${wConfig.qrSize}; height: ${wConfig.qrSize}; border: 1px solid #eee; padding: 2px; background: #fff; display: inline-block; }
+            .footer { font-size: 0.8em; margin-top: 15px; }
+            .item-row { margin: 4px 0; }
         </style>
     </head>
     <body>
         <div class="paper-preview">
-            <div class="print-content">
-                <div class="text-center">
-                    <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
+            <div class="text-center">
+                <div class="clinic-name bold uppercase">${state.clinicInfo.name || 'FISIOTA'}</div>
                 <div class="clinic-sub uppercase">${state.clinicInfo.subname || ''}</div>
-                <div style="font-size: 7pt; max-width: 95%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
-                <div style="font-size: 8pt;">WA: ${state.clinicInfo.phone || ''}</div>
+                <div style="font-size: 0.8em; max-width: 95%; margin: 0 auto;">${state.clinicInfo.address || ''}</div>
+                <div style="font-size: 0.85em;">WA: ${state.clinicInfo.phone || ''}</div>
                 
                 <div class="receipt-type bold uppercase">
                     ${type === 'BILL' ? 'Tagihan Pembayaran' : 'Kuitansi Pembayaran'}
                 </div>
             </div>
 
-            <div style="font-size: 8pt;">
+            <div style="font-size: 0.9em;">
                 <div class="flex"><span>Tgl Cetak:</span> <span>${now}</span></div>
                 <div class="flex"><span>Pasien:</span> <span class="bold">${nama}</span></div>
                 <div class="flex"><span>Tgl Kunj:</span> <span>${a.date}</span></div>
@@ -3994,33 +3915,32 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
 
             <div class="dashed-line"></div>
             
-            <div class="bold uppercase" style="font-size: 8pt; margin-bottom: 4px;">Rincian Layanan</div>
-            <div class="item-row flex" style="font-size: 8pt;">
-                <span style="max-width: ${wConfig.lineW};">${a.diagnosis || 'Layanan Fisioterapi'}</span>
+            <div class="bold uppercase" style="font-size: 0.9em; margin-bottom: 6px;">Rincian Layanan</div>
+            <div class="item-row flex" style="font-size: 0.9em;">
+                <span style="flex: 1; padding-right: 10px;">${a.diagnosis || 'Layanan Fisioterapi'}</span>
                 <span>${formatRp(feeBase)}</span>
             </div>
             
             <div class="dashed-line"></div>
             
-            <div class="flex"><span>Subtotal:</span> <span>${formatRp(feeBase)}</span></div>
-            ${discount > 0 ? `<div class="flex"><span>Diskon:</span> <span>-${formatRp(discount)}</span></div>` : ''}
-            <div class="flex bold" style="font-size: 11pt; margin-top: 6px;">
+            <div class="flex" style="font-size: 0.9em;"><span>Subtotal:</span> <span>${formatRp(feeBase)}</span></div>
+            ${discount > 0 ? `<div class="flex" style="font-size: 0.9em;"><span>Diskon:</span> <span>-${formatRp(discount)}</span></div>` : ''}
+            <div class="flex bold" style="font-size: 1.1em; margin-top: 8px;">
                 <span>TOTAL:</span>
                 <span>${formatRp(finalAmount)}</span>
             </div>
 
             <div class="dashed-line"></div>
             
-            <div class="flex" style="font-size: 8pt;"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
-            <div class="flex" style="font-size: 8pt;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
+            <div class="flex" style="font-size: 0.9em;"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
+            <div class="flex" style="font-size: 0.9em;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
 
             ${qrHTML}
 
             <div class="footer text-center">
-                ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 9pt;">TERIMA KASIH</p><p>Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 9pt;">BUKTI TAGIHAN</p><p>Harap disimpan</p>'}
+                ${type === 'RECEIPT' ? '<p class="bold" style="font-size: 1.1em; margin:0;">TERIMA KASIH</p><p style="margin: 4px 0;">Semoga lekas sembuh & sehat selalu</p>' : '<p class="bold" style="font-size: 1.1em; margin:0;">BUKTI TAGIHAN</p><p style="margin: 4px 0;">Harap disimpan</p>'}
                 <div class="dashed-line"></div>
-                <p style="font-size: 6pt;">E-Receipt by FISIOTA.com</p>
-            </div>
+                <p style="font-size: 0.8em; margin:0;">E-Receipt by FISIOTA.com</p>
             </div>
         </div>
     </body>
