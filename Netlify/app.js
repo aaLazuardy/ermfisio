@@ -3872,8 +3872,8 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
                 }
                 .paper-preview {
                     width: 100%;
-                    max-width: 100%;
-                    margin: 0; 
+                    max-width: ${wConfig.maxWidth};
+                    margin: 0 auto; 
                     padding: ${wConfig.padding}; 
                     box-shadow: none;
                 }
