@@ -2997,29 +2997,6 @@ function renderConfigView(container) {
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo?.address || ''}</textarea></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo?.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🏷️ NPWP Klinik / Pribadi</label><input type="text" id="conf-npwp" value="${state.clinicInfo?.npwp || ''}" placeholder="00.000.000.0-000.000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
-                        <div class="col-span-full mt-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-100">
-                            <h4 class="font-bold text-purple-800 flex items-center gap-2 mb-3"><i data-lucide="qr-code" width="18"></i> Pengaturan QRIS Statis</h4>
-                            <div class="flex flex-col md:flex-row gap-6">
-                                <div class="shrink-0">
-                                    <div id="qris-preview-container" class="w-40 h-40 bg-white rounded-xl border-2 border-dashed border-purple-200 flex items-center justify-center overflow-hidden">
-                                        ${state.clinicInfo?.qrisImage
-            ? `<img src="${state.clinicInfo.qrisImage}" class="w-full h-full object-contain">`
-            : `<div class="text-center text-slate-300"><i data-lucide="image" width="32" class="mx-auto mb-1"></i><p class="text-[10px]">Belum ada QR</p></div>`}
-                                    </div>
-                                </div>
-                                <div class="flex-1 space-y-3">
-                                    <p class="text-xs text-slate-600">Upload gambar QRIS statis klinik Anda (format JPG/PNG). Gambar ini akan muncul di modal pembayaran saat metode QRIS dipilih.</p>
-                                    <input type="file" id="conf-qris-file" accept="image/*" onchange="handleQrisUpload(this)" class="hidden">
-                                    <div class="flex gap-2">
-                                        <button onclick="document.getElementById('conf-qris-file').click()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-sm">
-                                            <i data-lucide="upload" width="16"></i> Pilih Gambar
-                                        </button>
-                                        ${state.clinicInfo?.qrisImage ? `<button onclick="removeQrisImage()" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors">Hapus</button>` : ''}
-                                    </div>
-                                    <input type="hidden" id="conf-qris-base64" value="${state.clinicInfo?.qrisImage || ''}">
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="mt-6 pt-4 border-t border-slate-100 text-right"><button onclick="saveClinicConfig()" id="btn-save-clinic" class="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center justify-center gap-2 ml-auto"><i data-lucide="save" width="16"></i> Simpan & Sinkron Cloud</button></div>
@@ -3211,7 +3188,7 @@ async function saveClinicConfig() {
         phone: document.getElementById('conf-phone').value,
         mapsUrl: document.getElementById('conf-maps')?.value || '',
         npwp: document.getElementById('conf-npwp')?.value || '',
-        qrisImage: document.getElementById('conf-qris-base64')?.value || ''
+        qrisImage: ''
     };
 
     localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
@@ -3237,7 +3214,7 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_ADDRESS', value: state.clinicInfo.address },
                 { key: 'CLINIC_NPWP', value: state.clinicInfo.npwp },
                 { key: 'CLINIC_PHONE', value: state.clinicInfo.phone },
-                { key: 'CLINIC_QRIS', value: state.clinicInfo.qrisImage }
+                { key: 'CLINIC_QRIS', value: '' }
             ];
 
             await fetch(LICENSE_API_URL, {
@@ -3822,18 +3799,11 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
     let finalAmount = (savedFinal !== null && savedFinal > 0) ? savedFinal : (feeBase - discount);
 
     const method = a.paymentMethod || state._selectedPaymentMethod || 'Tunai';
-    const qrisImg = state.clinicInfo.qrisImage || '';
 
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
     const now = new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-    const qrHTML = (method === 'QRIS' && qrisImg) ? `
-        <div class="qr-container">
-            <p class="bold qr-title">SCAN UNTUK BAYAR (QRIS)</p>
-            <img src="${qrisImg}" class="qr-image" />
-            <p class="qr-price">Harga: <span class="bold">${formatRp(finalAmount)}</span></p>
-        </div>
-    ` : '';
+    const qrHTML = '';
 
     if (paperSize === 'A4') {
         return `
@@ -3934,7 +3904,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
         `;
     }
 
-    const wConfig = paperSize === '80mm' ? { paper: '80mm', content: '74mm', fontSize: '10pt', qrSize: '50mm', lineW: '70%' } : { paper: '58mm', content: '54mm', fontSize: '9pt', qrSize: '40mm', lineW: '65%' };
+    const wConfig = paperSize === '80mm' ? { paper: '80mm', padding: '4mm', fontSize: '10pt', qrSize: '50mm', lineW: '70%' } : { paper: '58mm', padding: '4mm', fontSize: '9pt', qrSize: '40mm', lineW: '65%' };
 
     return `
     <html>
@@ -3947,17 +3917,19 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
             body { 
                 width: ${wConfig.paper}; 
                 margin: 0; 
-                padding: 2mm;
+                padding: ${wConfig.padding} ${wConfig.padding};
+                box-sizing: border-box;
                 font-family: 'Courier New', Courier, monospace; 
                 font-size: ${wConfig.fontSize}; 
-                line-height: 1.2; 
+                line-height: 1.25; 
                 color: #000;
                 background: #fff;
             }
             @media print {
-                html, body { width: ${wConfig.paper}; margin: 0; padding: 0; }
-                .print-content { width: ${wConfig.content}; margin: 0 auto; padding: 2mm 0; }
+                html, body { width: ${wConfig.paper}; margin: 0; padding: ${wConfig.padding} ${wConfig.padding}; box-sizing: border-box; }
+                .print-content { width: 100%; margin: 0; padding: 0; }
             }
+            .print-content { width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .bold { font-weight: bold; }
