@@ -3739,6 +3739,18 @@ function renderPrintView(container) {
         return generateSingleAssessmentHTML(a, p);
     }).join('');
 
+    let docTitle = 'Laporan_Assessment';
+    if (targets.length === 1) {
+        const a = targets[0];
+        const p = state.patients.find(pt => pt.id === a.patientId);
+        const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.name || 'Pasien');
+        const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
+        const sessionNum = pAppts.findIndex(x => x.id === a.id) + 1;
+        const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
+        docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
+    }
+    state.printDocumentTitle = docTitle;
+
     container.innerHTML = `
         <div id="preview-layer" class="min-h-screen bg-slate-700 pb-20">
             <style type="text/css" media="print">
@@ -3781,16 +3793,7 @@ function downloadPDFWithHtml2Pdf(type, apptId = null) {
         element = document.querySelector('#preview-layer > div:last-child');
         if (!element) return;
 
-        let docTitle = 'Laporan_Assessment';
-        if (state.currentAssessment) {
-            const a = state.currentAssessment;
-            const p = state.patients.find(pt => pt.id === a.patientId);
-            const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.name || 'Pasien');
-            const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
-            const sessionNum = pAppts.findIndex(x => x.id === a.id) + 1;
-            const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
-            docTitle = `${nama}-${diag}-${sessionNum > 0 ? 'PertemuanKe' + sessionNum : 'P1'}-${new Date().toISOString().split('T')[0]}`;
-        }
+        let docTitle = state.printDocumentTitle || 'Laporan_Assessment';
 
         opt = {
             margin: 10,
