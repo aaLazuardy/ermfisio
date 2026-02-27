@@ -3749,7 +3749,8 @@ function renderPrintView(container) {
                 <div><h2 class="text-lg font-bold">Print Preview</h2><p class="text-xs text-slate-400">Total: ${targets.length} Dokumen</p></div>
                 <div class="flex gap-3">
                     <button onclick="closePrintView()" class="px-6 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-bold text-sm transition-colors border border-slate-600">Tutup</button>
-                    <button onclick="handlePrintWithTip()" class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold text-sm transition-colors shadow-lg flex items-center gap-2"><i data-lucide="printer" width="16"></i> Cetak Sekarang</button>
+                    <button onclick="downloadPDFWithHtml2Pdf('assessment')" class="px-6 py-2 rounded-lg bg-green-600 hover:bg-green-500 font-bold text-sm transition-colors shadow-lg flex items-center gap-2"><i data-lucide="download" width="16"></i> Simpan PDF</button>
+                    <button onclick="handlePrintWithTip()" class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold text-sm transition-colors shadow-lg flex items-center gap-2"><i data-lucide="printer" width="16"></i> Cetak / Print</button>
                 </div>
             </div>
             <div class="flex flex-col items-center justify-center p-4 md:p-8 gap-8">${pagesHtml}</div>
@@ -3766,6 +3767,72 @@ function handlePrintWithTip() {
             document.title = titleBackup;
         }, 100);
     }
+}
+
+function downloadPDFWithHtml2Pdf(type, apptId = null) {
+    if (typeof html2pdf === 'undefined') {
+        alert("Library PDF gagal dimuat. Silakan gunakan tombol Cetak/Print biasa.");
+        return;
+    }
+
+    let element, opt;
+
+    if (type === 'assessment') {
+        element = document.querySelector('#preview-layer .flex-col');
+        if (!element) return;
+        opt = {
+            margin: 10,
+            filename: (state.printDocumentTitle || 'Laporan_Assessment') + '.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+    } else if (type === 'receipt') {
+        const iframe = document.getElementById('receipt-preview-iframe');
+        if (!iframe) return;
+        element = iframe.contentDocument.body;
+
+        let docTitle = 'Struk_Pembayaran';
+        if (apptId) {
+            const a = (state.appointments || []).find(x => x.id === apptId) || (state.assessments || []).find(x => x.id === apptId);
+            if (a) {
+                const p = (state.patients || []).find(pt => pt.id === a.patientId);
+                const nama = p ? p.name.replace(/[^a-zA-Z0-9 ]/g, '') : (a.visitor_name || a.name || 'Pasien');
+                const pAppts = (state.assessments || []).filter(x => x.patientId === a.patientId).sort((x, y) => new Date(x.date) - new Date(y.date));
+                let sessionNum = pAppts.findIndex(x => x.id === apptId) + 1;
+                if (sessionNum === 0) sessionNum = pAppts.length + 1;
+                const diag = (a.diagnosis || 'Layanan').replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'Layanan';
+                const dateStr = (a.date || '').replace(/[^0-9-]/g, '');
+                docTitle = `${nama}-${diag}-PertemuanKe${sessionNum}-${dateStr}`;
+            }
+        }
+
+        let format = 'a4';
+        const paperSize = document.getElementById('receipt-paper-size') ? document.getElementById('receipt-paper-size').value : 'A4';
+
+        // custom width mm, auto height
+        if (paperSize === '58mm') format = [58, 210];
+        else if (paperSize === '80mm') format = [80, 297];
+
+        opt = {
+            margin: 5,
+            filename: docTitle + '.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, windowWidth: element.scrollWidth },
+            jsPDF: { unit: 'mm', format: format, orientation: 'portrait' }
+        };
+    }
+
+    const originalCursor = document.body.style.cursor;
+    document.body.style.cursor = 'wait';
+
+    html2pdf().set(opt).from(element).save().then(() => {
+        document.body.style.cursor = originalCursor;
+    }).catch(err => {
+        console.error("PDF generation failed", err);
+        document.body.style.cursor = originalCursor;
+        alert("Gagal membuat PDF: " + err.message);
+    });
 }
 
 function closePrintView() {
@@ -5455,6 +5522,9 @@ function openReceiptPreview(apptId, type) {
                         <option value="A4">Kertas Invoice (A4)</option>
                     </select>
                 </div>
+                <button onclick="downloadPDFWithHtml2Pdf('receipt', '${apptId}')" class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg shadow-green-500/50 flex items-center gap-2 transition-all btn-press text-sm">
+                    <i data-lucide="download" width="18"></i> Simpan PDF
+                </button>
                 <button onclick="executeReceiptPrint('${apptId}')" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/50 flex items-center gap-2 transition-all btn-press text-sm">
                     <i data-lucide="printer" width="18"></i> Cetak Sekarang
                 </button>
