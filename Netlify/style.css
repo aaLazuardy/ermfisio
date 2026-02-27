@@ -152,12 +152,9 @@
 /* 2. MODE CETAK (Saat Printer Jalan) */
 @media print {
   @page {
-    /* PENTING: Ubah 'size: A4' menjadi 'size: auto'.
-       Ini membiarkan settingan printer (Ctrl+P) yang menentukan ukuran kertas.
-       Jadi kalau user pilih F4 di dialog print, CSS akan menyesuaikan.
-    */
+    /* PENTING: Margin 0mm menghilangkan header/footer bawaan browser yang memunculkan tulisan title/URL */
     size: auto;
-    margin: 0;
+    margin: 0mm;
   }
 
   body,
@@ -200,8 +197,8 @@
   /* Reset Wrapper untuk Printer */
   .print-page-wrapper {
     margin: 0 !important;
-    /* Margin fisik kertas diatur oleh @page di app.js */
-    padding: 0 !important;
+    /* Memberikan jarak fisik dari tepi kertas agar konten tidak terpotong karena @page margin 0 */
+    padding: 15mm 20mm !important;
     box-shadow: none !important;
     border: none !important;
     /* PENTING: Lebar 100% dan tinggi auto */
@@ -225,8 +222,7 @@
 /* --- 3. LAYOUT DENSITY MODES (Preview & Print) --- */
 /* Compact Mode */
 body.print-compact .print-page-wrapper {
-  padding: 0 !important;
-  /* Managed by @page */
+  padding: 10mm 15mm !important;
   font-size: 9pt !important;
 }
 
@@ -271,8 +267,7 @@ body.print-compact .gap-6 {
 /* Relaxed Mode */
 /* Relaxed Mode */
 body.print-relaxed .print-page-wrapper {
-  padding: 0 !important;
-  /* Managed by @page */
+  padding: 20mm 25mm !important;
   font-size: 11pt !important;
 }
 

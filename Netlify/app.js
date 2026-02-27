@@ -3862,7 +3862,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
         <style>
             @page { 
                 size: ${wConfig.page}; 
-                margin: 0; 
+                margin: 0mm; 
             }
             body { 
                 margin: 0; 
