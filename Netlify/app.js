@@ -5027,7 +5027,11 @@ function renderKasirLaporan(formatRp) {
                 </button>
                 <button onclick="printJournalReport()"
                     class="bg-slate-800 hover:bg-black text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md flex items-center gap-2">
-                    <i data-lucide="printer" width="16"></i> Cetak Jurnal
+                    <i data-lucide="printer" width="16"></i> Cetak Jurnal Pemasukan
+                </button>
+                <button onclick="printFinancialReport()"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md flex items-center gap-2">
+                    <i data-lucide="bar-chart-2" width="16"></i> Cetak Laporan Keuangan
                 </button>
                 <button onclick="printAppointmentReport()"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-md flex items-center gap-2">
@@ -6062,6 +6066,196 @@ function printAppointmentReport() {
             <div class="footer">
                 <div>Dicetak otomatis oleh Sistem ERM FISIOTA pada ${now.toLocaleString('id-ID')}</div>
                 <div>Halaman 1 / 1</div>
+            </div>
+        </body>
+        </html>
+    `;
+    printHTML(html);
+}
+
+function printFinancialReport() {
+    const now = new Date();
+    const clinic = state.clinicInfo || { name: 'FISIOTA' };
+
+    const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const defaultTo = today();
+    const from = state.laporanFrom || defaultFrom;
+    const to = state.laporanTo || defaultTo;
+
+    // Filter Pemasukan
+    const incomes = (state.appointments || []).filter(a => {
+        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+        const isLegacyPaid = (!a.paymentStatus || a.paymentStatus === "") && (a.paymentMethod || a.paidAt);
+        const apptDate = (a.paidAt || a.date || '');
+        const dateStr = apptDate.slice(0, 10);
+        return (isPaid || isLegacyPaid) && dateStr >= from && dateStr <= to;
+    }).sort((a, b) => (a.paidAt || a.date || "").localeCompare(b.paidAt || b.date || ""));
+
+    // Filter Pengeluaran
+    const expenses = (state.expenses || []).filter(e => {
+        const d = (e.date || '').slice(0, 10);
+        return d >= from && d <= to;
+    }).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+    // Hitung Total
+    const totalIncome = incomes.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
+    const totalExpense = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const netProfit = totalIncome - totalExpense;
+
+    function renderDate(d) {
+        if (!d) return '-';
+        return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    const incomeRows = incomes.map((a, idx) => {
+        const patient = state.patients.find(p => p.id === a.patientId) || { name: a.visitor_name || a.name || 'Pasien' };
+        const amt = parseRp(a.finalAmount) || parseRp(a.fee) || 0;
+        return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${renderDate(a.paidAt || a.date)}</td>
+                <td>${patient.name}</td>
+                <td>${a.paymentMethod || '-'}</td>
+                <td style="text-align: right;">${amt.toLocaleString('id-ID')}</td>
+            </tr>
+        `;
+    }).join('') || '<tr><td colspan="5" style="text-align:center; padding: 10px; color:#94a3b8;">Tidak ada data pemasukan</td></tr>';
+
+    const expenseRows = expenses.map((e, idx) => {
+        const amt = Number(e.amount) || 0;
+        return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${renderDate(e.date)}</td>
+                <td>${e.category || '-'}</td>
+                <td>${e.notes || '-'}</td>
+                <td style="text-align: right;">${amt.toLocaleString('id-ID')}</td>
+            </tr>
+        `;
+    }).join('') || '<tr><td colspan="5" style="text-align:center; padding: 10px; color:#94a3b8;">Tidak ada data pengeluaran</td></tr>';
+
+    const html = `
+        <html>
+        <head>
+            <title>Laporan Keuangan - ${clinic.name}</title>
+            <style>
+                @page { size: A4 portrait; margin: 15mm; }
+                body { font-family: 'Inter', -apple-system, system-ui, sans-serif; padding: 0; color: #1e293b; line-height: 1.4; font-size: 11px; }
+                
+                .header-wrapper { display: flex; align-items: flex-start; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 20px; }
+                .logo-box { width: 60px; height: 60px; background: #f1f5f9; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 15px; border: 1px solid #cbd5e1; }
+                .clinic-info { flex: 1; }
+                .clinic-info h1 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.5px; }
+                .clinic-info p { margin: 1px 0; color: #64748b; font-size: 10px; }
+                .clinic-info .bold { color: #0f172a; font-weight: 700; }
+
+                .report-header { text-align: center; margin-bottom: 20px; }
+                .report-header h2 { margin: 0; font-size: 16px; font-weight: 800; border-bottom: 1px solid #1e293b; display: inline-block; padding-bottom: 2px; }
+                .report-header p { margin: 4px 0 0; font-size: 12px; font-weight: 700; color: #334155; }
+
+                .section-title { font-size: 12px; font-weight: 800; color: #0f172a; margin: 15px 0 5px; text-transform: uppercase; background: #f1f5f9; padding: 4px 8px; display: inline-block; border-radius: 4px; }
+                
+                table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+                th { background: #f8fafc; color: #1e293b; font-weight: 800; text-transform: uppercase; font-size: 10px; border-top: 1px solid #1e293b; border-bottom: 1px solid #1e293b; padding: 6px; text-align: left; }
+                td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+                
+                .summary-box { border: 2px solid #1e293b; border-radius: 8px; padding: 15px; margin-top: 25px; background: #fafafa; }
+                .summary-table { width: 100%; margin: 0; }
+                .summary-table td { border: none; padding: 4px 0; font-size: 12px; }
+                .summary-table .label { font-weight: 700; color: #334155; }
+                .summary-table .value { text-align: right; font-weight: 800; }
+                .summary-table .total-row td { border-top: 2px solid #1e293b; padding-top: 8px; margin-top: 4px; font-size: 14px; font-weight: 900; }
+                
+                .profit { color: #059669; }
+                .loss { color: #dc2626; }
+
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
+                .print-meta { font-size: 9px; color: #94a3b8; font-style: italic; }
+                .signature-box { text-align: center; width: 200px; }
+                .signature-box p { margin: 2px 0; }
+                .signature-space { height: 60px; }
+
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="header-wrapper">
+                <div class="logo-box">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                </div>
+                <div class="clinic-info">
+                    <h1>${clinic.name}</h1>
+                    <p>${clinic.subname || 'Fisioterapi & Rehabilitasi'}</p>
+                    <p>${clinic.address || 'Alamat belum diatur'}</p>
+                    <p>Telp: <span class="bold">${clinic.phone || '-'}</span> | SIPF: <span class="bold">${clinic.sipf || '-'}</span></p>
+                </div>
+            </div>
+
+            <div class="report-header">
+                <h2>LAPORAN KEUANGAN KLINIK</h2>
+                <p>PERIODE: ${from} s/d ${to}</p>
+            </div>
+
+            <!-- TABEL PEMASUKAN -->
+            <div class="section-title">A. Pemasukan (Kredit)</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%; text-align:center;">No</th>
+                        <th style="width: 15%;">Tanggal</th>
+                        <th style="width: 40%;">Sumber / Pasien</th>
+                        <th style="width: 20%;">Metode</th>
+                        <th style="width: 20%; text-align:right;">Nominal (Rp)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${incomeRows}
+                </tbody>
+            </table>
+
+            <!-- TABEL PENGELUARAN -->
+            <div class="section-title">B. Pengeluaran (Debit)</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%; text-align:center;">No</th>
+                        <th style="width: 15%;">Tanggal</th>
+                        <th style="width: 20%;">Kategori</th>
+                        <th style="width: 40%;">Keterangan</th>
+                        <th style="width: 20%; text-align:right;">Nominal (Rp)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${expenseRows}
+                </tbody>
+            </table>
+
+            <!-- RINGKASAN LABA RUGI -->
+            <div class="summary-box">
+                <table class="summary-table">
+                    <tr>
+                        <td class="label">Total Pemasukan Operasional</td>
+                        <td class="value">${totalIncome.toLocaleString('id-ID')}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Total Beban / Pengeluaran</td>
+                        <td class="value" style="color:#dc2626;">(${totalExpense.toLocaleString('id-ID')})</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td class="label">LABA BERSIH (NET PROFIT)</td>
+                        <td class="value ${netProfit >= 0 ? 'profit' : 'loss'}">${netProfit.toLocaleString('id-ID')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="footer">
+                <div class="print-meta">Dicetak pada: ${new Date().toLocaleString('id-ID')} oleh ${state.user ? state.user.name : 'System'}</div>
+                <div class="signature-box">
+                    <p>Mengetahui,</p>
+                    <div class="signature-space"></div>
+                    <p style="font-weight: 800; text-decoration: underline;">${clinic.therapist || 'Pimpinan Klinik'}</p>
+                    <p style="font-size: 9px; color: #64748b;">${clinic.sipf ? 'SIPF. ' + clinic.sipf : 'Pimpinan'}</p>
+                </div>
             </div>
         </body>
         </html>
