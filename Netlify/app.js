@@ -693,7 +693,7 @@ async function pushDataToSheet() {
         const response = await fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: 'push', // FULL SYNC (OVERWRITE)
                 sheet_id: sheetId,
@@ -759,7 +759,7 @@ async function syncDelta() {
         await fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: 'delta_push',
                 sheet_id: sheetId,
@@ -3467,7 +3467,7 @@ async function saveNotificationConfig() {
                 await fetch(LICENSE_API_URL, {
                     method: 'POST',
                     mode: 'cors',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify({ action: 'save_config', sheet_id: sheetId, config: configPayload })
                 });
                 alert('Permintaan Simpan Dikirim ke Cloud!\nSilahkan cek Sheet Klien dalam beberapa saat.');
@@ -4849,7 +4849,7 @@ function renderKasirAntrian(formatRp) {
                 ${lunas.map(a => {
                 const p = (state.patients || []).find(pt => pt.id === a.patientId);
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
-                const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'BPJS': '🏥' };
+                const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'QRIS': '📱', 'BPJS': '🏥', 'Paket': '📦' };
                 return `
                     <div class="flex items-center gap-4 px-6 py-3 bg-emerald-50/30">
                         <div class="flex-1 min-w-0">
@@ -5056,7 +5056,7 @@ function renderKasirLaporan(formatRp) {
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const totalIncome = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
-    const byMethod = { Tunai: 0, Transfer: 0, BPJS: 0 };
+    const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
     filtered.forEach(a => {
         const m = a.paymentMethod || 'Tunai';
         byMethod[m] = (byMethod[m] || 0) + (parseRp(a.finalAmount) || parseRp(a.fee) || 0);
@@ -5193,7 +5193,7 @@ function renderKasirLaporan(formatRp) {
                 <div class="space-y-4">
                     ${Object.entries(byMethod).sort((a, b) => b[1] - a[1]).map(([m, v]) => {
         const pct = totalIncome > 0 ? (v / totalIncome) * 100 : 0;
-        const colors = { Tunai: 'bg-emerald-500 shadow-emerald-100', Transfer: 'bg-blue-500 shadow-blue-100', BPJS: 'bg-orange-500 shadow-orange-100' };
+        const colors = { Tunai: 'bg-emerald-500 shadow-emerald-100', Transfer: 'bg-blue-500 shadow-blue-100', QRIS: 'bg-purple-500 shadow-purple-100', BPJS: 'bg-orange-500 shadow-orange-100' };
         return `
                         <div>
                             <div class="flex justify-between text-[11px] mb-2 font-black uppercase tracking-tight">
@@ -5275,7 +5275,7 @@ function renderKasirLaporan(formatRp) {
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
                 const terapis = (state.users || []).find(u => u.id === a.therapistId);
                 const paidDate = a.paidAt ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-                const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'BPJS': 'bg-teal-100 text-teal-700' };
+                const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'QRIS': 'bg-purple-100 text-purple-700', 'BPJS': 'bg-teal-100 text-teal-700' };
                 const mc = methodColors[a.paymentMethod] || 'bg-slate-100 text-slate-600';
                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
@@ -5421,15 +5421,15 @@ function openPaymentModal(apptId) {
             <!-- Pilih Metode -->
             <div>
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
-                <div class="grid grid-cols-2 xs:grid-cols-5 gap-2" id="pm-method-group">
-                    ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'BPJS'] : ['Tunai', 'Transfer', 'BPJS']).map(m => `
+                <div class="grid grid-cols-2 gap-2" id="pm-method-group">
+                    ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'QRIS', 'BPJS'] : ['Tunai', 'Transfer', 'QRIS', 'BPJS']).map(m => `
                         <label class="cursor-pointer">
                             <input type="radio" name="pm-method" value="${m}" class="peer hidden" onchange="pmMethodSelected(this)">
-                            <div class="peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-600 border border-slate-200 bg-white rounded-xl p-3 text-center transition-all">
-                                <div class="text-xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : '🏥'}</div>
-                        <div class="text-[10px] uppercase">${m}</div>
-                    </div>
-                </label>`).join('')}
+                            <div class="peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-600 border border-slate-200 bg-white rounded-xl py-3 px-2 flex flex-col justify-center items-center transition-all h-full aspect-square">
+                                <div class="text-3xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
+                                <div class="text-[10px] uppercase font-bold text-center">${m}</div>
+                            </div>
+                        </label>`).join('')}
                 </div>
             </div>
         </div>
