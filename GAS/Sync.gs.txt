@@ -108,7 +108,16 @@ function saveDataFixed(ss, name, data, headers) {
 function updateConfigSheet(ss, configData) {
     let sheet = getOrInsertSheet(ss, SHEET_NAMES.CONFIG, HEADERS.CONFIG);
     const map = new Map();
-    sheet.getDataRange().getValues().slice(1).forEach((r, i) => map.set(r[0], i + 2));
+    const data = sheet.getDataRange().getValues();
+    
+    // Scan ALL rows to find existing keys (handle case where header might not be at row 1)
+    data.forEach((r, i) => {
+        const keyName = String(r[0]).trim();
+        // Ignore real header row if it exists
+        if (keyName && keyName.toLowerCase() !== 'key') {
+            map.set(keyName, i + 1); // i + 1 is the actual 1-based Row number in Google Sheets
+        }
+    });
 
     configData.forEach(c => {
         const time = new Date();
@@ -118,6 +127,7 @@ function updateConfigSheet(ss, configData) {
             sheet.getRange(row, 3).setValue(time);
         } else {
             sheet.appendRow([c.key, c.value, time]);
+            map.set(c.key, sheet.getLastRow()); // Update map in case of duplicates
         }
     });
 }

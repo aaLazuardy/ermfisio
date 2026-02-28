@@ -847,6 +847,7 @@ async function pullDataFromSheet() {
                     if (c.key === 'CLINIC_ADDRESS') state.clinicInfo.address = c.value;
                     if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
                     if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
+                    if (c.key === 'CLINIC_MAPS') state.clinicInfo.mapsUrl = c.value;
                     if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
                     if (c.key === 'TELEGRAM_TOKEN') state.notificationConfig.telegramToken = c.value;
                     if (c.key === 'TELEGRAM_CHAT_ID') state.notificationConfig.telegramChatId = c.value;
@@ -1402,7 +1403,7 @@ function openDailyScheduleModal(dateStr) {
                             <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
                                 <span class="${typeColor} px-2 py-0.5 rounded border flex items-center gap-1 font-bold"><i data-lucide="${typeIcon}" width="10"></i> ${ptType}</span>
                                 <span class="bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1"><i data-lucide="user" width="10"></i> ${a.therapistId}</span>
-                                ${a.paymentStatus === 'PAID'
+                                ${isPaidAppt(a)
                 ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1 font-bold"><i data-lucide="check-circle" width="10"></i> LUNAS</span>`
                 : (a.status === 'CONFIRMED' ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200 flex items-center gap-1 font-bold"><i data-lucide="alert-circle" width="10"></i> BELUM BAYAR</span>` : '')}
                                 ${a.notes ? `<span class="italic text-slate-400 max-w-[200px] truncate"><i data-lucide="sticky-note" width="10" class="inline mr-1"></i>${a.notes}</span>` : ''}
@@ -2995,7 +2996,8 @@ function renderConfigView(container) {
                     <div class="space-y-4">
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nomor Izin / SIPF</label><input type="text" id="conf-sipf" value="${state.clinicInfo?.sipf || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Alamat (Kop Surat)</label><textarea id="conf-address" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm h-24">${state.clinicInfo?.address || ''}</textarea></div>
-                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo?.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">📞 No. Telepon / WA Klinik</label><input type="text" id="conf-phone" value="${state.clinicInfo?.phone || ''}" placeholder="0812-3456-7890" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🗺️ Maps URL (Link Lokasi)</label><input type="text" id="conf-maps" value="${state.clinicInfo?.mapsUrl || ''}" placeholder="https://maps.app.goo.gl/..." class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">🏷️ NPWP Klinik / Pribadi</label><input type="text" id="conf-npwp" value="${state.clinicInfo?.npwp || ''}" placeholder="00.000.000.0-000.000" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                     </div>
                 </div>
@@ -3214,6 +3216,7 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_ADDRESS', value: state.clinicInfo.address },
                 { key: 'CLINIC_NPWP', value: state.clinicInfo.npwp },
                 { key: 'CLINIC_PHONE', value: state.clinicInfo.phone },
+                { key: 'CLINIC_MAPS', value: state.clinicInfo.mapsUrl || '' },
                 { key: 'CLINIC_QRIS', value: '' }
             ];
 
@@ -4668,6 +4671,13 @@ function switchKasirTab(tab) {
 }
 
 // --- UTILS KASIR ---
+function isPaidAppt(a) {
+    if (!a) return false;
+    const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
+    const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
+    return isPaid || isLegacyPaid;
+}
+
 function parseRp(val) {
     if (typeof val === 'number') return val;
     if (!val) return 0;
@@ -4678,15 +4688,11 @@ function parseRp(val) {
 function renderKasirAntrian(formatRp) {
     const today = new Date().toISOString().slice(0, 10);
     const antrian = (state.appointments || []).filter(a => {
-        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
-        return a.date === today && (a.status === 'CONFIRMED' || !a.status) && !isPaid && !isLegacyPaid;
+        return a.date === today && (a.status === 'CONFIRMED' || !a.status) && !isPaidAppt(a);
     }).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
     const lunas = (state.appointments || []).filter(a => {
-        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
-        return a.date === today && (isPaid || isLegacyPaid);
+        return a.date === today && isPaidAppt(a);
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const totalLunasHariIni = lunas.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
@@ -4961,11 +4967,9 @@ function renderKasirLaporan(formatRp) {
     const savedTo = state.laporanTo || defaultTo;
 
     const filtered = (state.appointments || []).filter(a => {
-        const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
-        const isLegacyPaid = !a.paymentStatus && (a.paymentMethod || a.paidAt);
         const apptDate = (a.paidAt || a.date || '');
         const dateMatch = apptDate && apptDate.slice(0, 10) >= savedFrom && apptDate.slice(0, 10) <= savedTo;
-        return (isPaid || isLegacyPaid) && dateMatch;
+        return isPaidAppt(a) && dateMatch;
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const totalIncome = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
@@ -5257,9 +5261,10 @@ function openPaymentModal(apptId) {
     const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien Baru');
 
     // Ambil fee dari appointment, jika kosong ambil dari assessment terakhir di hari yang sama, jika masih kosong ambil defaultFee
-    let feeBase = parseRp(a.fee);
+    let feeBase = parseRp(a.fee) || parseRp(a.finalAmount);
     if (feeBase === 0) {
-        const lastAsm = (state.assessments || []).find(asm => asm.patientId === a.patientId && asm.date === a.date);
+        const lastAsm = (state.assessments || []).filter(asm => asm.patientId === a.patientId)
+            .sort((a, b) => b.date.localeCompare(a.date))[0];
         if (lastAsm && lastAsm.fee) feeBase = Number(lastAsm.fee);
     }
     if (feeBase === 0 && p) {
@@ -5441,7 +5446,12 @@ function updatePaymentTotal(feeBase) {
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
     const totalEl = document.getElementById('pm-total');
     const qrisNominal = document.getElementById('pm-qris-nominal');
-    if (totalEl) totalEl.textContent = formatRp(total);
+    if (totalEl) {
+        totalEl.textContent = formatRp(total);
+        if (total === 0) {
+            totalEl.innerHTML += ` <span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded animate-pulse">Cek Tarif!</span>`;
+        }
+    }
     if (qrisNominal) qrisNominal.textContent = formatRp(total);
 }
 

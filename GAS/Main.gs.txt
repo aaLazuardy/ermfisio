@@ -404,7 +404,7 @@ function doPost(e) {
                 const config = getConfigMap(ss);
                 const results = { telegram: false, email: false };
                 if (data.type === 'telegram' || data.type === 'all') {
-                    if (config.get('TELEGRAM_TOKEN') && config.get('TELEGRAM_CHAT_ID')) {
+                    if (config.get('TELEGRAM_CHAT_ID')) {
                         results.telegram = sendTelegram(config.get('TELEGRAM_TOKEN'), config.get('TELEGRAM_CHAT_ID'), data.message);
                     }
                 }
@@ -419,6 +419,11 @@ function doPost(e) {
             // ACTION: UPLOAD FILE TO DRIVE
             if (data.action === 'upload_file') {
                 return uploadFileToDrive(data);
+            }
+
+            // ACTION: BOOK APPOINTMENT (PUBLIC)
+            if (data.action === 'book_appointment' || data.action === 'public_booking') {
+                return handlePublicBooking(e, data);
             }
 
             return createJSONOutput({ status: "error", message: "Unknown action: " + data.action });
@@ -472,7 +477,7 @@ function getSidebarHtml() {
             <option value="lifetime">Lifetime (Selamanya)</option>
           </select>
         </div>
-        <button onclick="generate()">Generata Code</button>
+        <button onclick="generate()">Generate Code</button>
         
         <div id="result">
           <div style="font-size:11px; text-align:center; color:#64748b; margin-bottom:5px;">LICENSE KEY:</div>
@@ -504,13 +509,13 @@ function getSidebarHtml() {
             document.getElementById('key-out').innerText = res.key;
             document.getElementById('plan-out').innerText = res.plan;
             document.getElementById('exp-out').innerText = res.expiry;
-            document.querySelector('button').innerText = "Generata Code";
+            document.querySelector('button').innerText = "Generate Code";
             document.querySelector('button').disabled = false;
           }
           
           function onFail(err) {
             alert("Error: " + err);
-            document.querySelector('button').innerText = "Generata Code";
+            document.querySelector('button').innerText = "Generate Code";
             document.querySelector('button').disabled = false;
           }
         </script>

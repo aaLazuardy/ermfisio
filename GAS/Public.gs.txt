@@ -103,7 +103,9 @@ function handlePublicBooking(e, data) {
     // 5. Send Notification to Admin (Telegram) + WA Quick Reply Links
     try {
         const config = getConfigMap(ss);
-        if (config.get('TELEGRAM_TOKEN') && config.get('TELEGRAM_CHAT_ID')) {
+        if (config.get('TELEGRAM_CHAT_ID')) {
+            const tgToken = config.get('TELEGRAM_TOKEN');
+            const tgChatId = config.get('TELEGRAM_CHAT_ID');
             const patientLabel = isNewPatient ? '🆕 PASIEN BARU' : '🔄 PASIEN LAMA';
 
             // Sanitize patient phone for WA link
@@ -118,11 +120,7 @@ function handlePublicBooking(e, data) {
             const dateIndo = `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 
             // Get clinic name
-            let clinicName = 'FISIOTA';
-            try {
-                const ci = config.get('clinic_info');
-                if (ci) clinicName = (typeof ci === 'string' ? JSON.parse(ci) : ci).name || clinicName;
-            } catch(e) {}
+            let clinicName = config.get('CLINIC_NAME') || 'FISIOTA';
 
             // Auto-construct booking URL from alias in Licenses sheet
             let bookingUrl = NETLIFY_URL + '/Booking/'; // fallback default
@@ -199,24 +197,24 @@ function handlePublicBooking(e, data) {
             const waConfirmLink = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waConfirmText)}` : null;
             const waRejectLink  = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waRejectText)}`  : null;
 
-            // Build Telegram message
+            // Build Telegram message (HTML format)
             let msg =
-                `🔔 BOOKING BARU (PENDING)\n` +
+                `🔔 <b>BOOKING BARU (PENDING)</b>\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `${patientLabel}\n` +
                 `🏥 No. RM: ${patientId}\n` +
-                `👤 Nama: ${data.name}\n` +
+                `👤 Nama: <b>${data.name}</b>\n` +
                 `📅 ${dateIndo}  |  ⏰ ${data.time} WIB\n` +
                 `📞 ${data.contact}\n` +
                 `📝 Keluhan: ${data.complaint || '-'}\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `Balas via WA:\n`;
 
-            if (waConfirmLink) msg += `✅ [KONFIRMASI](${waConfirmLink})\n`;
-            if (waRejectLink)  msg += `❌ [TOLAK / JADWAL LAIN](${waRejectLink})\n`;
+            if (waConfirmLink) msg += `✅ <a href="${waConfirmLink}">KONFIRMASI</a>\n`;
+            if (waRejectLink)  msg += `❌ <a href="${waRejectLink}">TOLAK / JADWAL LAIN</a>\n`;
             msg += `\nAtau buka aplikasi untuk update status.`;
 
-            sendTelegram(config.get('TELEGRAM_TOKEN'), config.get('TELEGRAM_CHAT_ID'), msg);
+            sendTelegram(tgToken, tgChatId, msg);
         }
     } catch (notifErr) {
         console.warn("Failed to send notif: " + notifErr);

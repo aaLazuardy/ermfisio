@@ -41,8 +41,8 @@ function sendTelegram(token, chatId, text) {
     try {
         const url = `https://api.telegram.org/bot${finalToken}/sendMessage`;
 
-        // Coba kirim DENGAN Markdown dulu
-        const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
+        // Coba kirim DENGAN HTML dulu
+        const payload = { chat_id: chatId, text: text, parse_mode: 'HTML' };
         const response = UrlFetchApp.fetch(url, {
             method: 'post', contentType: 'application/json',
             payload: JSON.stringify(payload), muteHttpExceptions: true
@@ -52,10 +52,10 @@ function sendTelegram(token, chatId, text) {
         const resBody = response.getContentText();
         Logger.log(`[sendTelegram] Response ${resCode}: ${resBody}`);
 
-        // Jika 400 (Markdown Error) → Retry TANPA Markdown
+        // Jika 400 (HTML Error) → Retry TANPA HTML
         if (resCode === 400) {
-            Logger.log(`[sendTelegram] Markdown error, retrying without parse_mode...`);
-            const cleanText = text.replace(/[*_`\[\]()~>#+\-=|{}.!]/g, ''); // Strip markdown chars
+            Logger.log(`[sendTelegram] HTML error, retrying without parse_mode...`);
+            const cleanText = text.replace(/<[^>]*>?/gm, ''); // Strip HTML tags
             const retryPayload = { chat_id: chatId, text: cleanText };
             const retryRes = UrlFetchApp.fetch(url, {
                 method: 'post', contentType: 'application/json',
@@ -106,11 +106,10 @@ function formatDateIndo(dateStr) {
 // Return: { reminder: string, report: string }
 // ===================================================
 function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, config) {
-    clinicInfo = clinicInfo || {};
-    const clinicName = clinicInfo.name || 'FISIOTA';
-    const clinicAddress = clinicInfo.address || '';
-    const clinicMaps = clinicInfo.mapsUrl || '';
-    const clinicPhone = clinicInfo.phone || '';
+    const clinicName = config ? (config.get('CLINIC_NAME') || 'FISIOTA') : 'FISIOTA';
+    const clinicAddress = config ? (config.get('CLINIC_ADDRESS') || '') : '';
+    const clinicMaps = config ? (config.get('CLINIC_MAPS') || '') : '';
+    const clinicPhone = config ? (config.get('CLINIC_PHONE') || '') : '';
     const dateIndo = formatDateIndo(dateStr);
     let totalOmzet = 0;
 
@@ -165,7 +164,7 @@ function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, co
             const reminderTemplate = config ? (config.get('MSG_REMINDER_TEMPLATE') || defaultReminder) : defaultReminder;
             const waText = processPlaceholders(reminderTemplate, templateData);
 
-            waLink = `[Chat WA](https://wa.me/${phone}?text=${encodeURIComponent(waText)})`;
+            waLink = `<a href="https://wa.me/${phone}?text=${encodeURIComponent(waText)}">[Chat WA]</a>`;
         }
 
 
@@ -266,14 +265,8 @@ function processClientNotification(ssClient, clientConfig, targetDateStr, label,
     if (targetAppts.length === 0) return { sent: false, reason: 'no_appointments' };
 
     // 3. Get clinic info from config
-    let clinicInfo = { name: 'FISIOTA' };
-    try {
-        const clinicInfoRaw = clientConfig.get('clinic_info');
-        if (clinicInfoRaw) {
-            clinicInfo = typeof clinicInfoRaw === 'string' ? JSON.parse(clinicInfoRaw) : clinicInfoRaw;
-        }
-    } catch (e) { /* fallback to default */ }
-    Logger.log(`   🏥 Klinik: ${clinicInfo.name || 'FISIOTA'}`);
+    let clinicInfo = { name: clientConfig.get('CLINIC_NAME') || 'FISIOTA' };
+    Logger.log(`   🏥 Klinik: ${clinicInfo.name}`);
 
     // 4. Build messages
     const messages = buildReminderMessages(targetAppts, patientMap, targetDateStr, clinicInfo, clientConfig);
