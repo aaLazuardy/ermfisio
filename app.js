@@ -3078,6 +3078,7 @@ function renderConfigView(container) {
                             <div class="space-y-3">
                                 <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Chat ID (Wajib)</label><input type="text" id="notif-tg-chatid" value="${state.notificationConfig?.telegramChatId || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm font-mono" placeholder="-100xxxxxxx"></div>
                                 <div><label class="text-xs font-bold text-slate-400 uppercase block mb-1">Bot Token (Opsional)</label><input type="text" id="notif-tg-token" value="${state.notificationConfig?.telegramToken || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs font-mono text-slate-400" placeholder="Kosongkan jika pakai Bot Pusat"></div>
+                                <button onclick="testTelegramConnection()" id="btn-test-tg" class="w-full bg-sky-100 text-sky-700 py-2 rounded-lg text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-2 border border-sky-200 transition-all"><i data-lucide="send" width="14"></i> Tes Kirim Telegram</button>
                             </div>
                         </div>
                     </div>
@@ -3465,6 +3466,40 @@ async function saveNotificationConfig() {
         }
     } else {
         alert('Konfigurasi Disimpan (Hanya Lokal - Script URL belum diset)!');
+    }
+}
+
+async function testTelegramConnection() {
+    const chatId = document.getElementById('notif-tg-chatid').value.trim();
+    const token = document.getElementById('notif-tg-token').value.trim();
+    if (!chatId) { alert("⚠️ Chat ID wajib diisi untuk tes!"); return; }
+
+    const btn = document.getElementById('btn-test-tg');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" width="14"></i><span>Mengetes...</span>';
+    btn.disabled = true;
+    lucide.createIcons();
+
+    try {
+        const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+        const res = await fetch(LICENSE_API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                action: 'send_notif',
+                type: 'telegram',
+                sheet_id: sheetId,
+                message: `🛠️ TEST KONEKSI TELEGRAM\n\nKoneksi dari Web App FISIOTA berhasil!\nKlinik: ${state.clinicInfo.name}\nWaktu: ${new Date().toLocaleString('id-ID')}\n\nJika Anda menerima pesan ini, berarti Bot sudah siap bekerja. ✅`
+            })
+        });
+        alert("✅ Permintaan Terkirim!\nSilahkan cek chat Telegram Bot/Grup Anda.\n\nJika tidak muncul, pastikan Bot sudah di-START atau sudah masuk ke Grup.");
+    } catch (e) {
+        console.error(e);
+        alert("❌ Gagal mengirim tes. Cek koneksi internet atau URL script.");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        lucide.createIcons();
     }
 }
 
