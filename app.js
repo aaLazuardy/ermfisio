@@ -275,7 +275,7 @@ async function loadData() {
 
     // 4. Background Sync & UI Initialization
     updateSyncStatusUI(checkDataDirty());
-    setInterval(syncDelta, 5 * 60 * 1000); // Tiap 5 menit
+    setInterval(syncDelta, 1 * 60 * 1000); // Tiap 1 menit
 
     applyBranding();
 }
