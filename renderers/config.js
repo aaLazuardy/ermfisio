@@ -197,7 +197,10 @@ function renderPackagesConfig() {
 
 function renderBookingConfig() {
     const conf = state.bookingConfig || {};
-    const bookingFullUrl = (state.scriptUrl ? state.scriptUrl.replace('exec', 'run') : BOOKING_BASE_URL) + (state.sheetId ? '?id=' + state.sheetId : '');
+    const currentPath = window.location.pathname.replace(/\/[^/]*$/, '/');
+    const defaultBase = window.location.origin + currentPath;
+    const baseUrl = BOOKING_BASE_URL || defaultBase;
+    const bookingFullUrl = baseUrl + 'Booking/' + (state.sheetId ? '?id=' + state.sheetId : '');
 
     return `
         <div class="max-w-2xl space-y-8">
