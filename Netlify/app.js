@@ -2500,7 +2500,8 @@ function openAppointmentModal(dateStr, apptId = null, prefillData = null) {
     });
 
     clearBtn.addEventListener('click', function () {
-        searchInput.value = ''; hiddenInput.value = ''; feeInput.value = 0;
+        searchInput.value = ''; hiddenInput.value = '';
+        if (feeInput) feeInput.value = 0;
         resultBox.classList.add('hidden'); this.classList.add('hidden'); searchInput.focus();
     });
 
