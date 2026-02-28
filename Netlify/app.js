@@ -870,7 +870,6 @@ async function pullDataFromSheet() {
 
             saveData();
             alert('✅ Data berhasil ditarik dari Cloud!');
-            closeSyncToast();
             renderApp();
             applyBranding();
         } else {
