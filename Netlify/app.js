@@ -275,7 +275,8 @@ async function loadData() {
 
     // 4. Background Sync & UI Initialization
     updateSyncStatusUI(checkDataDirty());
-    setInterval(syncDelta, 1 * 60 * 1000); // Tiap 1 menit
+    setInterval(syncDelta, 1 * 60 * 1000); // Push Tiap 1 menit
+    setInterval(backgroundAutoSync, 1 * 60 * 1000); // Pull Tiap 1 menit
 
     applyBranding();
 }
@@ -910,6 +911,8 @@ function handleLogin(e) {
 
 async function backgroundAutoSync() {
     if (!state.scriptUrl) return; // Skip if no cloud connected
+    if (state._syncing) return;
+    state._syncing = true;
 
     const sheetId = getSheetIdFromUrl(state.scriptUrl);
     if (!sheetId) return;
@@ -1013,7 +1016,10 @@ async function backgroundAutoSync() {
             saveData();
 
             // Only show toast if something was actually pulled
-            if (action === 'pull' || (data.patients && data.patients.length > 0) || (data.assessments && data.assessments.length > 0)) {
+            if (action === 'pull' ||
+                (data.patients && data.patients.length > 0) ||
+                (data.assessments && data.assessments.length > 0) ||
+                (data.appointments && data.appointments.length > 0)) {
                 showToast('Sync Selesai ✅', 'success');
                 // Re-render current view if needed
                 if (state.currentView !== 'login') renderApp();
@@ -1021,6 +1027,8 @@ async function backgroundAutoSync() {
         }
     } catch (error) {
         console.error("Background Sync Failed:", error);
+    } finally {
+        state._syncing = false;
     }
 }
 
