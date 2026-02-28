@@ -5425,7 +5425,7 @@ function openPaymentModal(apptId) {
                     ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'QRIS', 'BPJS'] : ['Tunai', 'Transfer', 'QRIS', 'BPJS']).map(m => `
                         <label class="cursor-pointer">
                             <input type="radio" name="pm-method" value="${m}" class="peer hidden" onchange="pmMethodSelected(this)">
-                            <div class="peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-600 border border-slate-200 bg-white rounded-xl py-3 px-2 flex flex-col justify-center items-center transition-all h-full aspect-square">
+                            <div class="peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-600 border border-slate-200 bg-white rounded-xl py-3 px-2 flex flex-col justify-center items-center transition-all">
                                 <div class="text-3xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
                                 <div class="text-[10px] uppercase font-bold text-center">${m}</div>
                             </div>
