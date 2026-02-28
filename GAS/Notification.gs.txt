@@ -24,52 +24,82 @@ function getConfigMap(ss) {
 const GLOBAL_BOT_TOKEN = "8523631937:AAHQLhf6E_9uJd4Y9hwfWmQ1xqFWkqGrHpw";
 
 function sendTelegram(token, chatId, text) {
-    // Priority: Client Token > Global Token
-    const finalToken = token || GLOBAL_BOT_TOKEN;
-
-    if (!finalToken || finalToken.includes("GANTI")) {
-        Logger.log("TG Error: No Token Available");
+    const finalToken = token || getConfigMap(SpreadsheetApp.getActiveSpreadsheet()).get('TELEGRAM_TOKEN');
+    if (!finalToken || !chatId) {
+        Logger.log("TG Error: Token/ChatID missing!");
         return false;
     }
-
-    Logger.log(`[sendTelegram] Sending to ${chatId}. Text length: ${text ? text.length : 'EMPTY'}`);
     if (!text) { Logger.log("TG Error: Text is empty/null!"); return false; }
 
     try {
         const url = `https://api.telegram.org/bot${finalToken}/sendMessage`;
+        const MAX_LEN = 3900;
 
-        // Escape HTML special characters for Telegram
-        const escapedText = text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/&lt;a href=/g, '<a href=')  // Unescape <a> tags
-            .replace(/&lt;\/a&gt;/g, '</a>')
-            .replace(/&lt;b&gt;/g, '<b>')
-            .replace(/&lt;\/b&gt;/g, '</b>')
-            .replace(/&lt;i&gt;/g, '<i>')
-            .replace(/&lt;\/i&gt;/g, '</i>');
-
-        const payload = { chat_id: chatId.toString(), text: escapedText, parse_mode: 'HTML' };
-        const response = UrlFetchApp.fetch(url, {
-            method: 'post', contentType: 'application/json',
-            payload: JSON.stringify(payload), muteHttpExceptions: true
-        });
-        const resCode = response.getResponseCode();
-        const resBody = response.getContentText();
-        Logger.log(`[sendTelegram] Response ${resCode}: ${resBody}`);
-
-        if (resCode !== 200) {
-            Logger.log(`[sendTelegram] Error, retrying without parse_mode...`);
-            const plainText = text.replace(/<[^>]*>?/gm, ''); // Strip all tags
-            const retryPayload = { chat_id: chatId.toString(), text: plainText };
-            const retryRes = UrlFetchApp.fetch(url, {
-                method: 'post', contentType: 'application/json',
-                payload: JSON.stringify(retryPayload), muteHttpExceptions: true
-            });
-            return retryRes.getResponseCode() === 200;
+        // Auto-split long messages to prevent API errors and broken HTML tags
+        let textChunks = [];
+        if (text.length > MAX_LEN) {
+            // Split by double newline to preserve formatting chunks
+            let paragraphs = text.split('\n\n');
+            let currentChunk = '';
+            for (let p of paragraphs) {
+                if (currentChunk.length + p.length > MAX_LEN) {
+                    textChunks.push(currentChunk);
+                    currentChunk = p + '\n\n';
+                } else {
+                    currentChunk += p + '\n\n';
+                }
+            }
+            if (currentChunk.trim().length > 0) textChunks.push(currentChunk);
+        } else {
+            textChunks.push(text);
         }
-        return true;
+
+        let allSuccess = true;
+
+        for (let idx = 0; idx < textChunks.length; idx++) {
+            let chunk = textChunks[idx];
+            Logger.log(`[sendTelegram] Sending chunk ${idx+1}/${textChunks.length} to ${chatId}. Chunk length: ${chunk.length}`);
+
+            // 1. Escape all characters first
+            let escapedText = chunk
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // 2. Safely restore allowed tags using regex
+            escapedText = escapedText
+                .replace(/&lt;a\s+href=(.*?)&gt;/gi, (match, p1) => `<a href=${p1}>`)
+                .replace(/&lt;\/a\s*&gt;/gi, '</a>') // Fixed regex for closing </a> tag
+                .replace(/&lt;b&gt;/gi, '<b>')
+                .replace(/&lt;\/b&gt;/gi, '</b>')
+                .replace(/&lt;i&gt;/gi, '<i>')
+                .replace(/&lt;\/i&gt;/gi, '</i>');
+
+            const payload = { chat_id: chatId.toString(), text: escapedText, parse_mode: 'HTML' };
+            const response = UrlFetchApp.fetch(url, {
+                method: 'post', contentType: 'application/json',
+                payload: JSON.stringify(payload), muteHttpExceptions: true
+            });
+            const resCode = response.getResponseCode();
+            const resBody = response.getContentText();
+            Logger.log(`[sendTelegram] Chunk ${idx+1} Response ${resCode}: ${resBody}`);
+
+            if (resCode !== 200) {
+                Logger.log(`[sendTelegram] Chunk ${idx+1} Error, retrying without parse_mode...`);
+                const plainText = chunk.replace(/<[^>]*>?/gm, ''); // Strip all tags
+                const retryPayload = { chat_id: chatId.toString(), text: plainText };
+                const retryRes = UrlFetchApp.fetch(url, {
+                    method: 'post', contentType: 'application/json',
+                    payload: JSON.stringify(retryPayload), muteHttpExceptions: true
+                });
+                if (retryRes.getResponseCode() !== 200) allSuccess = false;
+            }
+            
+            // Add slight delay between chunks to avoid rate limiting
+            if (idx < textChunks.length - 1) Utilities.sleep(1000); 
+        }
+        
+        return allSuccess;
     } catch (e) {
         Logger.log("TG Error: " + e.toString());
         return false;
@@ -100,8 +130,39 @@ function sendEmail(to, subject, body, fromAlias) {
 function formatDateIndo(dateStr) {
     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const d = new Date(dateStr);
+    
+    // Normalize dateStr to ensure it's a valid Date object
+    let d;
+    if (dateStr instanceof Date) {
+        d = dateStr;
+    } else {
+        const norm = normalizeDate(dateStr);
+        d = new Date(norm);
+    }
+    
+    if (isNaN(d.getTime())) return dateStr;
     return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/**
+ * Normalize date string to yyyy-MM-dd
+ */
+function normalizeDate(s) {
+    if (!s) return "";
+    let str = String(s).split(" ")[0]; // Take only date part
+    if (str.includes("-")) {
+        // Assume yyyy-MM-dd or dd-MM-yyyy
+        let parts = str.split("-");
+        if (parts[0].length === 4) return str; // yyyy-MM-dd
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (str.includes("/")) {
+        // Assume dd/MM/yyyy or MM/dd/yyyy. Standard in this app is dd/MM/yyyy
+        let parts = str.split("/");
+        if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+    return str;
 }
 
 // ===================================================
@@ -260,10 +321,11 @@ function processClientNotification(ssClient, clientConfig, targetDateStr, label,
     const patientMap = new Map();
     patientData.forEach(p => patientMap.set(p.id, p));
 
-    // 2. Filter appointments for target date (Normalize to avoid string/date/time issues)
+    // 2. Filter appointments for target date
+    const normTarget = normalizeDate(targetDateStr);
     const targetAppts = apptData.filter(a => {
-        let aDate = String(a.date || "").split(" ")[0]; // Take only yyyy-MM-dd if it has time
-        return aDate === String(targetDateStr).split(" ")[0];
+        const normA = normalizeDate(a.date);
+        return normA === normTarget;
     });
 
     Logger.log(`   📊 Total appointments: ${apptData.length} | ${label}: ${targetAppts.length}`);
@@ -319,7 +381,15 @@ function sendDailyReminders() {
     const licenseSheet = ssAdmin.getSheetByName(SHEET_NAMES.LICENSES);
     if (!licenseSheet) { Logger.log("❌ Error: License Sheet not found"); return; }
 
-    const licenses = licenseSheet.getDataRange().getValues().slice(1);
+    const data = licenseSheet.getDataRange().getValues();
+    const headers = data[0];
+    const licenses = data.slice(1);
+    
+    const colKey = findColumnIndex(headers, ['key']);
+    const colName = findColumnIndex(headers, ['client_name', 'nama_klien']);
+    const colStatus = findColumnIndex(headers, ['status']);
+    const colSheetId = findColumnIndex(headers, ['sheet_id', 'id_sheet']);
+
     const today = new Date();
     const todayStr = Utilities.formatDate(today, TIMEZONE, "yyyy-MM-dd");
     Logger.log(`📅 Target: ${todayStr} | Total lisensi: ${licenses.length}`);
@@ -327,10 +397,9 @@ function sendDailyReminders() {
     let totalSent = 0;
 
     licenses.forEach(lic => {
-        const key = lic[0];
-        const clientName = lic[2];
-        const status = lic[5];
-        const sheetId = lic[6];
+        const clientName = colName !== -1 ? lic[colName] : "Unknown";
+        const status = colStatus !== -1 ? lic[colStatus] : "";
+        const sheetId = colSheetId !== -1 ? String(lic[colSheetId] || "").trim() : "";
 
         const statusStr = String(status || "").trim().toUpperCase();
         if (statusStr !== 'ACTIVE' || !sheetId) return;
@@ -359,7 +428,14 @@ function sendDailyReport() {
     const licenseSheet = ssAdmin.getSheetByName(SHEET_NAMES.LICENSES);
     if (!licenseSheet) { Logger.log("❌ Error: License Sheet not found"); return; }
 
-    const licenses = licenseSheet.getDataRange().getValues().slice(1);
+    const data = licenseSheet.getDataRange().getValues();
+    const headers = data[0];
+    const licenses = data.slice(1);
+    
+    const colName = findColumnIndex(headers, ['client_name', 'nama_klien']);
+    const colStatus = findColumnIndex(headers, ['status']);
+    const colSheetId = findColumnIndex(headers, ['sheet_id', 'id_sheet']);
+
     const today = new Date();
     const todayStr = Utilities.formatDate(today, TIMEZONE, "yyyy-MM-dd");
     Logger.log(`📅 Target: ${todayStr} | Total lisensi: ${licenses.length}`);
@@ -367,10 +443,9 @@ function sendDailyReport() {
     let totalSent = 0;
 
     licenses.forEach(lic => {
-        const key = lic[0];
-        const clientName = lic[2];
-        const status = lic[5];
-        const sheetId = lic[6];
+        const clientName = colName !== -1 ? lic[colName] : "Unknown";
+        const status = colStatus !== -1 ? lic[colStatus] : "";
+        const sheetId = colSheetId !== -1 ? String(lic[colSheetId] || "").trim() : "";
 
         const statusStr = String(status || "").trim().toUpperCase();
         if (statusStr !== 'ACTIVE' || !sheetId) return;

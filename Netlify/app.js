@@ -47,8 +47,7 @@ let state = {
         sipf: 'SIPF: ....................',
         address: 'Jl. Contoh No.1, Kota, Provinsi',
         phone: '',
-        mapsUrl: '',
-        qrisImage: ''
+        mapsUrl: ''
     },
     notificationConfig: {
         telegramToken: '',
@@ -691,9 +690,9 @@ async function pushDataToSheet() {
     const ensureTs = (list) => list.map(item => ({ ...item, updatedAt: item.updatedAt || now }));
 
     try {
-        await fetch(LICENSE_API_URL, {
+        const response = await fetch(LICENSE_API_URL, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'push', // FULL SYNC (OVERWRITE)
@@ -707,13 +706,17 @@ async function pushDataToSheet() {
             })
         });
 
-        // Update Last Sync Time
-        localStorage.setItem('erm_last_sync', new Date().toISOString());
-
-        alert(`✅ Sinkronisasi Total Berhasil!\nGoogle Sheet sekarang sama persis dengan Aplikasi.`);
+        const result = await response.json();
+        if (result.status === 'success') {
+            // Update Last Sync Time
+            localStorage.setItem('erm_last_sync', new Date().toISOString());
+            alert(`✅ Sinkronisasi Total Berhasil!\nGoogle Sheet sekarang sama persis dengan Aplikasi.`);
+        } else {
+            throw new Error(result.message || "Gagal sinkronisasi data.");
+        }
     } catch (error) {
         console.error('Gagal mengirim.', error);
-        alert('Gagal mengirim data. Cek koneksi internet.');
+        alert('❌ Gagal mengirim data.\n\nError: ' + error.message + '\n\nSaran: Cek koneksi internet atau pastikan Sheet sudah di-SHARE ke email script.');
     } finally {
         if (btn) btn.innerHTML = oriText;
         lucide.createIcons();
@@ -755,7 +758,7 @@ async function syncDelta() {
     try {
         await fetch(LICENSE_API_URL, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'delta_push',
@@ -814,8 +817,8 @@ async function pullDataFromSheet() {
     if (!state.scriptUrl) { alert('URL Google Sheet belum dikonfigurasi.'); return; }
 
     // NEW LOGIC: Use Central Bridge
-    const sheetId = getSheetIdFromUrl(state.scriptUrl);
-    if (!sheetId) { alert("Format URL Google Sheet tidak valid!"); return; }
+    const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
+    if (!sheetId) { alert("ID Spreadsheet tidak valid! Harap cek di menu Konfigurasi System."); return; }
 
     if (!confirm('PERHATIAN: Data lokal akan DITIMPA dengan data dari Google Sheet.\nData lokal yang belum disinkronkan akan HILANG.\n\nLanjutkan?')) return;
 
@@ -830,6 +833,11 @@ async function pullDataFromSheet() {
         // Use Central API + sheet_id param
         const response = await fetch(`${LICENSE_API_URL}?action=pull&sheet_id=${sheetId}&t=${Date.now()}`);
         const data = await response.json();
+
+        if (data.status === 'error') {
+            throw new Error(data.message || "Gagal menarik data.");
+        }
+
         if (data.patients && data.assessments) {
             state.patients = data.patients;
             state.assessments = sanitizeAssessments(data.assessments);
@@ -848,7 +856,6 @@ async function pullDataFromSheet() {
                     if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
                     if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
                     if (c.key === 'CLINIC_MAPS') state.clinicInfo.mapsUrl = c.value;
-                    if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
                     if (c.key === 'TELEGRAM_TOKEN') state.notificationConfig.telegramToken = c.value;
                     if (c.key === 'TELEGRAM_CHAT_ID') state.notificationConfig.telegramChatId = c.value;
                     if (c.key === 'EMAIL_RECEIVER') state.notificationConfig.targetEmail = c.value;
@@ -985,7 +992,6 @@ async function backgroundAutoSync() {
                     if (c.key === 'CLINIC_ADDRESS') state.clinicInfo.address = c.value;
                     if (c.key === 'CLINIC_NPWP') state.clinicInfo.npwp = c.value;
                     if (c.key === 'CLINIC_PHONE') state.clinicInfo.phone = c.value;
-                    if (c.key === 'CLINIC_QRIS') state.clinicInfo.qrisImage = c.value;
                     if (c.key === 'TELEGRAM_TOKEN') state.notificationConfig.telegramToken = c.value;
                     if (c.key === 'TELEGRAM_CHAT_ID') state.notificationConfig.telegramChatId = c.value;
                     if (c.key === 'EMAIL_RECEIVER') state.notificationConfig.targetEmail = c.value;
@@ -1711,6 +1717,7 @@ function printSelected() {
 
 function editAssessment(aid) {
     state.currentAssessment = state.assessments.find(a => a.id === aid);
+    if (!state.currentAssessment) return;
     state.selectedPatient = state.patients.find(p => p.id === state.currentAssessment.patientId);
     navigate('assessment_form');
 }
@@ -2669,7 +2676,7 @@ function generateSeries(startDate, count, freq) {
     return dates;
 }
 
-function confirmAppointment(id) {
+function confirmAppointment(id, fromUrl = false) {
     const idx = state.appointments.findIndex(a => a.id === id);
     if (idx > -1) {
         state.appointments[idx].status = 'CONFIRMED';
@@ -2677,20 +2684,58 @@ function confirmAppointment(id) {
         saveData();
         if (state.scriptUrl) syncDelta();
         if (state.scriptUrl) pushDataToSheet();
-        alert("Booking Diterima!");
+
+        // Notify Admin or Patient if needed
+        if (fromUrl) {
+            showToast("Booking ID " + id + " Telah DITERIMA!", "success");
+            // Optional: Send notification back to TG that it's confirmed
+            fetch(state.scriptUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'send_notif',
+                    type: 'telegram',
+                    message: `✅ Booking ID ${id} telah DITERIMA & Sinkron ke Sistem.`,
+                    sheet_id: state.sheetId
+                })
+            }).catch(e => console.error("Failed to send TG confirmation:", e));
+        } else {
+            alert("Booking Diterima!");
+        }
+
         closeModal();
-        renderScheduleView(document.getElementById('main-content'));
+        if (state.currentView === 'schedule') renderScheduleView(document.getElementById('main-content'));
     }
 }
 
-function deleteAppointment(id) {
+function deleteAppointment(id, fromUrl = false) {
     const appt = state.appointments.find(a => a.id === id);
-    if (appt && appt.groupId) {
+    if (!appt) return;
+
+    const performDelete = () => {
+        state.deletedIds.appointments.push(id);
+        state.appointments = state.appointments.filter(a => a.id !== id);
+        finalizeDelete();
+        if (fromUrl) {
+            showToast("Booking Berhasil DITOLAK/DIHAPUS", "error");
+            // Optional: Send notification back to TG that it's rejected
+            fetch(state.scriptUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'send_notif',
+                    type: 'telegram',
+                    message: `❌ Booking ID ${id} telah DITOLAK & Dihapus dari Sistem.`,
+                    sheet_id: state.sheetId
+                })
+            }).catch(e => console.error("Failed to send TG rejection:", e));
+        }
+    };
+
+    if (fromUrl) {
+        performDelete();
+    } else if (appt.groupId) {
         showSeriesOptions("Hapus Jadwal Berulang", "Apakah Anda ingin menghapus jadwal ini saja atau seluruh paket?",
             () => {
-                state.deletedIds.appointments.push(id);
-                state.appointments = state.appointments.filter(a => a.id !== id);
-                finalizeDelete();
+                performDelete();
             },
             () => {
                 const toDel = state.appointments.filter(a => a.groupId === appt.groupId).map(a => a.id);
@@ -2700,10 +2745,8 @@ function deleteAppointment(id) {
             }
         );
     } else {
-        if (confirm('Hapus jadwal ini?')) {
-            state.deletedIds.appointments.push(id);
-            state.appointments = state.appointments.filter(a => a.id !== id);
-            finalizeDelete();
+        if (confirm('Hapus/Tolak jadwal ini?')) {
+            performDelete();
         }
     }
 }
@@ -3191,7 +3234,7 @@ async function saveClinicConfig() {
         phone: document.getElementById('conf-phone').value,
         mapsUrl: document.getElementById('conf-maps')?.value || '',
         npwp: document.getElementById('conf-npwp')?.value || '',
-        qrisImage: ''
+
     };
 
     localStorage.setItem('erm_clinic_config', JSON.stringify(state.clinicInfo));
@@ -3217,12 +3260,11 @@ async function saveClinicConfig() {
                 { key: 'CLINIC_ADDRESS', value: state.clinicInfo.address },
                 { key: 'CLINIC_NPWP', value: state.clinicInfo.npwp },
                 { key: 'CLINIC_PHONE', value: state.clinicInfo.phone },
-                { key: 'CLINIC_MAPS', value: state.clinicInfo.mapsUrl || '' },
-                { key: 'CLINIC_QRIS', value: '' }
+                { key: 'CLINIC_MAPS', value: state.clinicInfo.mapsUrl || '' }
             ];
 
             await fetch(LICENSE_API_URL, {
-                method: 'POST', mode: 'no-cors',
+                method: 'POST', mode: 'cors',
                 headers: { 'Content-Type': 'text/plain' }, // Avoid preflight
                 body: JSON.stringify({
                     action: 'save_config',
@@ -3244,28 +3286,7 @@ async function saveClinicConfig() {
     }
 }
 
-function handleQrisUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 1024 * 1024) { alert("Ukuran file terlalu besar! Maksimal 1MB."); return; }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const base64 = e.target.result;
-        document.getElementById('conf-qris-base64').value = base64;
-        const preview = document.getElementById('qris-preview-container');
-        preview.innerHTML = `<img src="${base64}" class="w-full h-full object-contain">`;
-        lucide.createIcons();
-    };
-    reader.readAsDataURL(file);
-}
-
-function removeQrisImage() {
-    if (!confirm("Hapus gambar QRIS?")) return;
-    document.getElementById('conf-qris-base64').value = '';
-    document.getElementById('qris-preview-container').innerHTML = `<div class="text-center text-slate-300"><i data-lucide="image" width="32" class="mx-auto mb-1"></i><p class="text-[10px]">Belum ada QR</p></div>`;
-    lucide.createIcons();
-}
 
 function updatePdfConfig(key, value) {
     state.pdfConfig[key] = value;
@@ -3377,7 +3398,7 @@ async function saveBookingConfig() {
             // CRITICAL: Gunakan LICENSE_API_URL (App Script), bukan state.scriptUrl (Sheet)
             await fetch(LICENSE_API_URL, {
                 method: 'POST',
-                mode: 'no-cors', // Tetap pakai no-cors karena GAS limits, tapi kita sudah validasi ID di awal
+                mode: 'cors', // Removed no-cors trap so we can catch GAS errors
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
                     action: 'save_booking_config',
@@ -3446,7 +3467,7 @@ async function saveNotificationConfig() {
                 // CRITICAL FIX: Use LICENSE_API_URL (The App Script), NOT state.scriptUrl (The Sheet)
                 await fetch(LICENSE_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
+                    mode: 'cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'save_config', sheet_id: sheetId, config: configPayload })
                 });
@@ -3484,7 +3505,7 @@ async function testTelegramConnection() {
         const sheetId = state.sheetId || getSheetIdFromUrl(state.scriptUrl);
         const res = await fetch(LICENSE_API_URL, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
             body: JSON.stringify({
                 action: 'send_notif',
                 type: 'telegram',
@@ -4075,7 +4096,7 @@ function generateReceiptHTML(apptId, type = 'RECEIPT', paperSize = '58mm') {
             <div class="dashed-line"></div>
             
             <div class="flex" style="font-size: 0.9em;"><span>Metode:</span> <span class="bold uppercase">${method}</span></div>
-            <div class="flex" style="font-size: 0.9em;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? (method === 'QRIS' ? 'Menunggu Scan' : 'BELUM BAYAR') : 'LUNAS'}</span></div>
+            <div class="flex" style="font-size: 0.9em;"><span>Status:</span> <span class="bold uppercase">${type === 'BILL' ? 'BELUM BAYAR' : 'LUNAS'}</span></div>
 
             ${qrHTML}
 
@@ -4177,7 +4198,7 @@ async function requestResetCode(e) {
     try {
         await fetch(LICENSE_API_URL, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'log_reset',
@@ -4209,7 +4230,7 @@ async function verifyResetCode() {
     const inputCode = document.getElementById('otp-input').value;
     if (inputCode === tempResetCode) {
         if (confirm("Kode Benar! Hapus semua user custom?")) {
-            if (state.scriptUrl) { try { await fetch(state.scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'confirm_reset', code: inputCode }) }); await new Promise(r => setTimeout(r, 2000)); } catch (e) { } }
+            if (state.scriptUrl) { try { await fetch(state.scriptUrl, { method: 'POST', mode: 'cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'confirm_reset', code: inputCode }) }); await new Promise(r => setTimeout(r, 2000)); } catch (e) { } }
             localStorage.removeItem('erm_users');
             alert("✅ RESET BERHASIL! User dikembalikan ke default.");
             location.reload();
@@ -4497,12 +4518,40 @@ function saveSetupUrl() {
 document.addEventListener('DOMContentLoaded', async () => {
     checkLicense();
     await loadData();
+    handleUrlActions();
 
     setTimeout(renderIcons, 100);
     setInterval(updateDate, 1000);
     updateDate();
     checkOnlineStatus();
 });
+
+async function handleUrlActions() {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const id = params.get('id');
+    const client = params.get('client');
+
+    if (client && client !== state.sheetId) {
+        console.log("Auto-Connect to client:", client);
+        localStorage.setItem('erm_sheet_id', client);
+        state.sheetId = client;
+        // Optionally reload data if sheet_id changed
+        await loadData();
+    }
+
+    if (action && id) {
+        console.log("Processing URL Action:", action, id);
+        if (action === 'confirm') {
+            confirmAppointment(id, true);
+        } else if (action === 'decline') {
+            deleteAppointment(id, true);
+        }
+
+        // Clear params to avoid loop
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+}
 
 // --- 21. LICENSE UPDATE LOGIC ---
 // --- 21. LICENSE UPDATE LOGIC ---
@@ -4801,7 +4850,7 @@ function renderKasirAntrian(formatRp) {
                 ${lunas.map(a => {
                 const p = (state.patients || []).find(pt => pt.id === a.patientId);
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
-                const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'QRIS': '📱', 'BPJS': '🏥' };
+                const methodIcons = { 'Tunai': '💵', 'Transfer': '🏦', 'BPJS': '🏥' };
                 return `
                     <div class="flex items-center gap-4 px-6 py-3 bg-emerald-50/30">
                         <div class="flex-1 min-w-0">
@@ -5008,7 +5057,7 @@ function renderKasirLaporan(formatRp) {
     }).sort((a, b) => (b.paidAt || b.date || '').localeCompare(a.paidAt || a.date || ''));
 
     const totalIncome = filtered.reduce((s, a) => s + (parseRp(a.finalAmount) || parseRp(a.fee) || 0), 0);
-    const byMethod = { Tunai: 0, Transfer: 0, QRIS: 0, BPJS: 0 };
+    const byMethod = { Tunai: 0, Transfer: 0, BPJS: 0 };
     filtered.forEach(a => {
         const m = a.paymentMethod || 'Tunai';
         byMethod[m] = (byMethod[m] || 0) + (parseRp(a.finalAmount) || parseRp(a.fee) || 0);
@@ -5145,7 +5194,7 @@ function renderKasirLaporan(formatRp) {
                 <div class="space-y-4">
                     ${Object.entries(byMethod).sort((a, b) => b[1] - a[1]).map(([m, v]) => {
         const pct = totalIncome > 0 ? (v / totalIncome) * 100 : 0;
-        const colors = { Tunai: 'bg-emerald-500 shadow-emerald-100', Transfer: 'bg-blue-500 shadow-blue-100', QRIS: 'bg-indigo-500 shadow-indigo-100', BPJS: 'bg-orange-500 shadow-orange-100' };
+        const colors = { Tunai: 'bg-emerald-500 shadow-emerald-100', Transfer: 'bg-blue-500 shadow-blue-100', BPJS: 'bg-orange-500 shadow-orange-100' };
         return `
                         <div>
                             <div class="flex justify-between text-[11px] mb-2 font-black uppercase tracking-tight">
@@ -5227,7 +5276,7 @@ function renderKasirLaporan(formatRp) {
                 const nama = p ? p.name : (a.visitor_name || a.name || 'Pasien');
                 const terapis = (state.users || []).find(u => u.id === a.therapistId);
                 const paidDate = a.paidAt ? new Date(a.paidAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-                const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'QRIS': 'bg-purple-100 text-purple-700', 'BPJS': 'bg-teal-100 text-teal-700' };
+                const methodColors = { 'Tunai': 'bg-green-100 text-green-700', 'Transfer': 'bg-blue-100 text-blue-700', 'BPJS': 'bg-teal-100 text-teal-700' };
                 const mc = methodColors[a.paymentMethod] || 'bg-slate-100 text-slate-600';
                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
@@ -5306,7 +5355,7 @@ function openPaymentModal(apptId) {
         feeBase = Number(p.defaultFee) || 0;
     }
 
-    const qrisImg = state.clinicInfo.qrisImage || '';
+
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
     // Reset temporary state for payment
@@ -5374,25 +5423,15 @@ function openPaymentModal(apptId) {
             <div>
                 <p class="text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pembayaran</p>
                 <div class="grid grid-cols-2 xs:grid-cols-5 gap-2" id="pm-method-group">
-                    ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'QRIS', 'BPJS'] : ['Tunai', 'Transfer', 'QRIS', 'BPJS']).map(m => `
-                    <button type="button" onclick="selectPaymentMethod('${m}')" id="pm-${m}"
-                        class="py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400">
-                        <div class="text-xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : m === 'QRIS' ? '📱' : '🏥'}</div>
+                    ${(p && p.quota > 0 ? ['Paket', 'Tunai', 'Transfer', 'BPJS'] : ['Tunai', 'Transfer', 'BPJS']).map(m => `
+                        <label class="cursor-pointer">
+                            <input type="radio" name="pm-method" value="${m}" class="peer hidden" onchange="pmMethodSelected(this)">
+                            <div class="peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-600 border border-slate-200 bg-white rounded-xl p-3 text-center transition-all">
+                                <div class="text-xl mb-1">${m === 'Paket' ? '📦' : m === 'Tunai' ? '💵' : m === 'Transfer' ? '🏦' : '🏥'}</div>
                         <div class="text-[10px] uppercase">${m}</div>
-                    </button>`).join('')}
+                    </div>
+                </label>`).join('')}
                 </div>
-            </div>
-
-            <!-- QRIS Panel (hidden by default) -->
-            <div id="pm-qris-panel" class="hidden bg-purple-50 border-2 border-purple-200 rounded-2xl p-5 text-center">
-                ${qrisImg
-            ? `<img src="${qrisImg}" alt="QR Code Klinik" class="w-48 h-48 object-contain mx-auto rounded-xl border border-slate-200 bg-white p-2">`
-            : `<div class="w-48 h-48 mx-auto bg-white rounded-xl border-2 border-dashed border-purple-300 flex items-center justify-center text-slate-400 text-sm">
-                            <div class="text-center"><i data-lucide="qr-code" width="48" class="mx-auto mb-2 text-purple-300"></i><p>QR belum diupload</p><p class="text-xs">Upload di menu Konfigurasi</p></div>
-                       </div>`}
-                <p class="text-purple-700 font-bold mt-3 text-sm">Silakan Scan QRIS:</p>
-                <p class="text-2xl font-black text-purple-800" id="pm-qris-nominal">${formatRp(feeBase)}</p>
-                <p class="text-xs text-purple-500 mt-1 italic">Scan QR, masukkan nominal & konfirmasi</p>
             </div>
         </div>
         <div class="px-6 py-4 border-t bg-slate-50 sticky bottom-0">
@@ -5443,11 +5482,11 @@ function openPaymentModal(apptId) {
     renderIcons();
 }
 
-function selectPaymentMethod(method) {
-    state._selectedPaymentMethod = method;
+function pmMethodSelected(radio) {
+    state._selectedPaymentMethod = radio.value;
 
     // Auto discount for 'Paket' (Session Usage)
-    if (method === 'Paket') {
+    if (radio.value === 'Paket') {
         const fee = Number(document.getElementById('pm-fee-base')?.value) || 0;
         const discInput = document.getElementById('pm-discount');
         if (discInput) {
@@ -5455,23 +5494,12 @@ function selectPaymentMethod(method) {
             handlePaymentUpdateManual();
         }
     }
-    // Update button styles
-    ['Tunai', 'Transfer', 'QRIS', 'BPJS'].forEach(m => {
-        const btn = document.getElementById(`pm-${m}`);
-        if (!btn) return;
-        btn.className = m === method
-            ? 'py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-blue-600 bg-blue-50 text-blue-700'
-            : 'py-2 px-1 rounded-xl border-2 text-sm font-bold transition-all border-slate-200 text-slate-600 hover:border-blue-400';
-    });
-    // Show/hide QRIS panel
-    const qrisPanel = document.getElementById('pm-qris-panel');
-    if (qrisPanel) qrisPanel.classList.toggle('hidden', method !== 'QRIS');
     // Enable confirm button
     const btn = document.getElementById('pm-confirm-btn');
     if (btn) {
         btn.disabled = false;
         const help = document.getElementById('pm-help-text');
-        if (help) help.textContent = `Bayar via ${method}`;
+        if (help) help.textContent = `Bayar via ${radio.value}`;
     }
 }
 
@@ -5480,14 +5508,12 @@ function updatePaymentTotal(feeBase) {
     const total = Math.max(0, feeBase - disc);
     const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
     const totalEl = document.getElementById('pm-total');
-    const qrisNominal = document.getElementById('pm-qris-nominal');
     if (totalEl) {
         totalEl.textContent = formatRp(total);
         if (total === 0) {
             totalEl.innerHTML += ` <span class="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded animate-pulse">Cek Tarif!</span>`;
         }
     }
-    if (qrisNominal) qrisNominal.textContent = formatRp(total);
 }
 
 async function confirmPayment(apptId) {
@@ -5501,6 +5527,12 @@ async function confirmPayment(apptId) {
     const packageIdBought = document.getElementById('pm-package-buy')?.value;
 
     if (!method) { alert('Pilih metode pembayaran!'); return; }
+
+    // BLOKIR PEMBAYARAN BUTA Rp 0
+    if (finalAmount === 0 && method !== 'Paket') {
+        const sure = confirm("Peringatan: Total Tagihan Rp 0. Apakah Anda yakin ingin mengkonfirmasi pembayaran ini sebagai Lunas?");
+        if (!sure) return;
+    }
 
     // Update state
     a.fee = feeBase;
@@ -6315,7 +6347,7 @@ async function autoSyncPayment(appt) {
     try {
         await fetch(LICENSE_API_URL, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'sync_incremental',

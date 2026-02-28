@@ -100,6 +100,7 @@ function handlePublicBooking(e, data) {
     const apptLastRow = sheet.getLastRow();
     sheet.getRange(apptLastRow, 12).setNumberFormat('@').setValue(data.contact);
 
+
     // 5. Send Notification to Admin (Telegram) + WA Quick Reply Links
     try {
         const config = getConfigMap(ss);

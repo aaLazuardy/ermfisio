@@ -68,14 +68,19 @@ function showLicenseSidebar() {
 // --- 3. WEB APP HANDLERS (API) ---
 
 function doGet(e) {
-    const action = e.parameter.action || "pull";
+    try {
+        const action = e.parameter.action || "pull";
 
-    // --- BRIDGE LOGIC ---
-    // If sheet_id is provided, use it. Otherwise use default.
-    if (e.parameter.sheet_id) TARGET_SHEET_ID = e.parameter.sheet_id;
-    // --------------------
+        // --- BRIDGE LOGIC (Sanitized) ---
+        let rawId = e.parameter.sheet_id || "";
+        if (rawId.includes('/d/')) {
+            const match = rawId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) rawId = match[1];
+        }
+        if (rawId) TARGET_SHEET_ID = rawId;
+        // --------------------
 
-    const ss = getSpreadsheet();
+        const ss = getSpreadsheet();
 
     // ACTION: CHECK LICENSE (GET Method - CORS Friendly)
     if (action === "check_license") {
@@ -225,6 +230,10 @@ function doGet(e) {
     }
 
     return createJSONOutput({ status: "ready", message: "FISIOTA Backend V5.0 Ready" });
+    } catch (err) {
+        Logger.log("doGet Error: " + err);
+        return createJSONOutput({ status: "error", message: err.toString() });
+    }
 }
 
 function updateAllConnectedClients() {
@@ -281,17 +290,19 @@ function updateAllConnectedClients() {
 }
 
 function doPost(e) {
-    const lock = LockService.getScriptLock();
-    if (lock.tryLock(10000)) {
-        try {
-            let data;
-            try { data = JSON.parse(e.postData.contents); } catch (err) { return createJSONOutput({ status: "error", message: "Invalid JSON" }); }
+    try {
+        let data;
+        try { data = JSON.parse(e.postData.contents); } catch (err) { return createJSONOutput({ status: "error", message: "Invalid JSON" }); }
 
-            // --- BRIDGE LOGIC ---
-            if (e.parameter.sheet_id) TARGET_SHEET_ID = e.parameter.sheet_id;
-            else if (data.sheet_id) TARGET_SHEET_ID = data.sheet_id;
+        // --- BRIDGE LOGIC (Sanitized) ---
+        let rawId = e.parameter.sheet_id || data.sheet_id || "";
+        if (String(rawId).includes('/d/')) {
+            const match = String(rawId).match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) rawId = match[1];
+        }
+        if (rawId) TARGET_SHEET_ID = rawId;
 
-            Logger.log(`[doPost] Action: ${data.action} | TargetSheet: ${TARGET_SHEET_ID}`);
+        Logger.log(`[doPost] Action: ${data.action} | TargetSheet: ${TARGET_SHEET_ID}`);
 
             // === 1. MASTER-ONLY ACTIONS (Works even if Client Sheet is not shared) ===
             
@@ -423,19 +434,18 @@ function doPost(e) {
 
             // ACTION: BOOK APPOINTMENT (PUBLIC)
             if (data.action === 'book_appointment' || data.action === 'public_booking') {
+                if (!TARGET_SHEET_ID) {
+                    return createJSONOutput({ status: "error", message: "Gagal Booking: ID Klinik tidak valid (sheet_id kosong)." });
+                }
                 return handlePublicBooking(e, data);
             }
 
             return createJSONOutput({ status: "error", message: "Unknown action: " + data.action });
 
-        } catch (err) {
-            Logger.log("doPost Error: " + err);
-            return createJSONOutput({ status: "error", message: err.toString() });
-        } finally {
-            lock.releaseLock();
-        }
+    } catch (err) {
+        Logger.log("doPost Error: " + err);
+        return createJSONOutput({ status: "error", message: err.toString() });
     }
-    return createJSONOutput({ status: "error", message: "Server busy" });
 }
 
 
