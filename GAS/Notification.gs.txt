@@ -8,17 +8,14 @@ function getConfigMap(ss) {
     const sheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
     const map = new Map();
     if (!sheet) return map;
-    const data = sheet.getDataRange().getValues().slice(1); // Skip header (Row 1)
-
-    // Debug: Log what config keys are found
-    const foundKeys = [];
+    const data = sheet.getDataRange().getValues();
+    
     data.forEach(row => {
-        if (row[0]) {
-            map.set(row[0], row[1]);
-            foundKeys.push(row[0]);
+        const key = String(row[0] || "").trim();
+        if (key && key.toLowerCase() !== 'key') {
+            map.set(key, row[1]);
         }
     });
-    Logger.log(`   -> Config Loaded Keys: ${foundKeys.join(', ')}`);
     return map;
 }
 
@@ -41,32 +38,38 @@ function sendTelegram(token, chatId, text) {
     try {
         const url = `https://api.telegram.org/bot${finalToken}/sendMessage`;
 
-        // Coba kirim DENGAN HTML dulu
-        const payload = { chat_id: chatId, text: text, parse_mode: 'HTML' };
+        // Escape HTML special characters for Telegram
+        const escapedText = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/&lt;a href=/g, '<a href=')  // Unescape <a> tags
+            .replace(/&lt;\/a&gt;/g, '</a>')
+            .replace(/&lt;b&gt;/g, '<b>')
+            .replace(/&lt;\/b&gt;/g, '</b>')
+            .replace(/&lt;i&gt;/g, '<i>')
+            .replace(/&lt;\/i&gt;/g, '</i>');
+
+        const payload = { chat_id: chatId.toString(), text: escapedText, parse_mode: 'HTML' };
         const response = UrlFetchApp.fetch(url, {
             method: 'post', contentType: 'application/json',
             payload: JSON.stringify(payload), muteHttpExceptions: true
         });
-
         const resCode = response.getResponseCode();
         const resBody = response.getContentText();
         Logger.log(`[sendTelegram] Response ${resCode}: ${resBody}`);
 
-        // Jika 400 (HTML Error) → Retry TANPA HTML
-        if (resCode === 400) {
-            Logger.log(`[sendTelegram] HTML error, retrying without parse_mode...`);
-            const cleanText = text.replace(/<[^>]*>?/gm, ''); // Strip HTML tags
-            const retryPayload = { chat_id: chatId, text: cleanText };
+        if (resCode !== 200) {
+            Logger.log(`[sendTelegram] Error, retrying without parse_mode...`);
+            const plainText = text.replace(/<[^>]*>?/gm, ''); // Strip all tags
+            const retryPayload = { chat_id: chatId.toString(), text: plainText };
             const retryRes = UrlFetchApp.fetch(url, {
                 method: 'post', contentType: 'application/json',
                 payload: JSON.stringify(retryPayload), muteHttpExceptions: true
             });
-            const retryCode = retryRes.getResponseCode();
-            Logger.log(`[sendTelegram] Retry Response ${retryCode}: ${retryRes.getContentText()}`);
-            return retryCode === 200;
+            return retryRes.getResponseCode() === 200;
         }
-
-        return resCode === 200;
+        return true;
     } catch (e) {
         Logger.log("TG Error: " + e.toString());
         return false;
@@ -120,14 +123,15 @@ function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, co
 
     appointments.forEach((a, index) => {
         const p = patientMap.get(a.patientId) || { name: 'Unknown', phone: '', category: 'Umum', diagnosis: '-' };
-        const fee = parseFloat(a.fee) || parseFloat(p.defaultFee) || 0;
+        const fee = parseFloat(String(a.fee || "0").replace(/\./g, "")) || parseFloat(String(p.defaultFee || "0").replace(/\./g, "")) || 0;
         totalOmzet += fee;
 
         // Emoji berdasarkan kategori
-        const locEmoji = (p.category && p.category.toLowerCase().includes('home')) ? '🏠' : '🏥';
+        const categoryStr = String(p.category || 'Umum').toLowerCase();
+        const locEmoji = categoryStr.includes('home') ? '🏠' : '🏥';
 
         // Sanitize Phone for WA
-        let phone = (p.phone || "").toString().replace(/[^0-9]/g, '');
+        let phone = String(p.phone || "").replace(/[^0-9]/g, '');
         if (phone.startsWith('0')) phone = '62' + phone.substring(1);
         if (phone.startsWith('8')) phone = '62' + phone;
 
@@ -177,7 +181,10 @@ function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, co
     reminder += `✨ Semangat melayani! ✨`;
 
     // ===== PESAN 2: LAPORAN HARIAN =====
-    const fmtOmzet = new Intl.NumberFormat('id-ID').format(totalOmzet);
+    let fmtOmzet = totalOmzet.toString();
+    try {
+        fmtOmzet = new Intl.NumberFormat('id-ID').format(totalOmzet);
+    } catch(e) { /* Safe fallback */ }
 
     let report = `🌙✨ LAPORAN HARIAN ✨🌙\n`;
     report += `━━━━━━━━━━━━━━━━━━\n`;
@@ -253,11 +260,10 @@ function processClientNotification(ssClient, clientConfig, targetDateStr, label,
     const patientMap = new Map();
     patientData.forEach(p => patientMap.set(p.id, p));
 
-    // 2. Filter appointments for target date
+    // 2. Filter appointments for target date (Normalize to avoid string/date/time issues)
     const targetAppts = apptData.filter(a => {
-        let aDate = a.date;
-        if (aDate instanceof Date) aDate = Utilities.formatDate(aDate, TIMEZONE, "yyyy-MM-dd");
-        return aDate === targetDateStr;
+        let aDate = String(a.date || "").split(" ")[0]; // Take only yyyy-MM-dd if it has time
+        return aDate === String(targetDateStr).split(" ")[0];
     });
 
     Logger.log(`   📊 Total appointments: ${apptData.length} | ${label}: ${targetAppts.length}`);
@@ -326,7 +332,8 @@ function sendDailyReminders() {
         const status = lic[5];
         const sheetId = lic[6];
 
-        if (status !== 'ACTIVE' || !sheetId) return;
+        const statusStr = String(status || "").trim().toUpperCase();
+        if (statusStr !== 'ACTIVE' || !sheetId) return;
 
         try {
             const ssClient = SpreadsheetApp.openById(sheetId);
@@ -365,7 +372,8 @@ function sendDailyReport() {
         const status = lic[5];
         const sheetId = lic[6];
 
-        if (status !== 'ACTIVE' || !sheetId) return;
+        const statusStr = String(status || "").trim().toUpperCase();
+        if (statusStr !== 'ACTIVE' || !sheetId) return;
 
         try {
             const ssClient = SpreadsheetApp.openById(sheetId);
@@ -418,7 +426,8 @@ function testDailyReminderNow() {
         Logger.log(`\n--- [${idx + 1}] Klien: ${clientName} | Key: ${key} ---`);
         Logger.log(`   Status: ${status} | SheetID: ${sheetId || 'KOSONG'}`);
 
-        if (status !== 'ACTIVE') { Logger.log("   ⏭️ Skip: Status bukan ACTIVE"); return; }
+        const statusStr = String(status || "").trim().toUpperCase();
+        if (statusStr !== 'ACTIVE') { Logger.log("   ⏭️ Skip: Status bukan ACTIVE"); return; }
         if (!sheetId) { Logger.log("   ⏭️ Skip: Sheet ID kosong"); return; }
 
         try {
