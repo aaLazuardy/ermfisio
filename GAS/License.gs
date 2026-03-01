@@ -100,6 +100,7 @@ function verifyLicense(keyInput, clientSheetId) {
     // Update Sheet ID if provided and different
     if (clientSheetId && found.sheetId !== clientSheetId) {
         sheet.getRange(foundRow, 7).setValue(clientSheetId);
+        found.sheetId = clientSheetId; // CRITICAL: Update the object so response returns the NEW ID
     }
 
     const now = new Date();

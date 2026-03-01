@@ -17,13 +17,22 @@ function handlePublicBooking(e, data) {
     const apptSheet = ss.getSheetByName(SHEET_NAMES.APPOINTMENTS);
     if (apptSheet && apptSheet.getLastRow() > 1) {
         const rows = apptSheet.getDataRange().getValues();
+        const headers = rows[0];
+        const colDate = findColumnIndex(headers, ['date', 'tanggal']);
+        const colTime = findColumnIndex(headers, ['time', 'jam', 'waktu']);
+        const colStatus = findColumnIndex(headers, ['status']);
+        const colPatId = findColumnIndex(headers, ['patientId', 'patient id', 'rm']);
+
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            let rDate = row[2];
+            let rDate = row[colDate !== -1 ? colDate : 2];
             if (rDate instanceof Date) rDate = Utilities.formatDate(rDate, TIMEZONE, "yyyy-MM-dd");
-            const rTime = row[3];
-            const rStatus = row[8];
-            if (rDate === data.date && rTime === data.time && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
+            const rTime = normalizeTime(row[colTime !== -1 ? colTime : 3]);
+            const rStatus = colStatus !== -1 ? String(row[colStatus]).toUpperCase().trim() : "";
+            const rPatId = colPatId !== -1 ? String(row[colPatId]).trim() : "";
+
+            // Check if slot same AND status is active
+            if (rDate === data.date && rTime === normalizeTime(data.time) && rStatus !== 'REJECTED' && rStatus !== 'CANCELLED') {
                 return createJSONOutput({ status: "error", message: "Maaf, slot waktu ini sudah terisi." });
             }
         }
@@ -94,11 +103,26 @@ function handlePublicBooking(e, data) {
     };
 
     const sheet = getOrInsertSheet(ss, SHEET_NAMES.APPOINTMENTS, HEADERS.APPOINTMENTS);
-    const rowData = HEADERS.APPOINTMENTS.map(k => newAppointment[k] || "");
+    const rowData = HEADERS.APPOINTMENTS.map(k => {
+        let val = newAppointment[k] || "";
+        // Ensure date and time are clean strings before appending
+        if (k === 'date') val = String(val).trim();
+        if (k === 'time') val = normalizeTime(val);
+        return val;
+    });
+    
     sheet.appendRow(rowData);
-    // Force kolom visitor_contact (L, kolom 12) jadi teks agar 0 di depan tidak hilang
+    
+    // Force formatting to avoid Sheets auto-converting to weird locales
     const apptLastRow = sheet.getLastRow();
-    sheet.getRange(apptLastRow, 12).setNumberFormat('@').setValue(data.contact);
+    const headers = HEADERS.APPOINTMENTS;
+    const colDate = headers.indexOf('date') + 1;
+    const colTime = headers.indexOf('time') + 1;
+    const colContact = headers.indexOf('visitor_contact') + 1;
+
+    if (colDate > 0) sheet.getRange(apptLastRow, colDate).setNumberFormat('@');
+    if (colTime > 0) sheet.getRange(apptLastRow, colTime).setNumberFormat('@');
+    if (colContact > 0) sheet.getRange(apptLastRow, colContact).setNumberFormat('@');
 
 
     // 5. Send Notification to Admin (Telegram) + WA Quick Reply Links

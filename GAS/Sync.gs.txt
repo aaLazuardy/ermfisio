@@ -39,8 +39,16 @@ function getDataFromSheet(ss, sheetName) {
         let obj = {};
         headers.forEach((h, i) => {
             let val = row[i];
-            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
-            if (h === 'time') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "HH:mm") : val;
+            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') {
+                if (val instanceof Date) {
+                    val = Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd");
+                }
+            }
+            if (h === 'time') {
+                if (val instanceof Date) {
+                    val = Utilities.formatDate(val, TIMEZONE, "HH:mm");
+                }
+            }
             obj[h] = val;
         });
         return obj;
@@ -86,8 +94,16 @@ function getDeltaDataFromSheet(ss, sheetName, lastSyncStr, limit) {
         let obj = {};
         headers.forEach((h, i) => {
             let val = row[i];
-            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd") : val;
-            if (h === 'time') val = (val instanceof Date) ? Utilities.formatDate(val, TIMEZONE, "HH:mm") : val;
+            if (h === 'date' || h === 'dob' || h === 'created_at' || h === 'updatedAt' || h === 'paidAt') {
+                if (val instanceof Date) {
+                    val = Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd");
+                }
+            }
+            if (h === 'time') {
+                if (val instanceof Date) {
+                    val = Utilities.formatDate(val, TIMEZONE, "HH:mm");
+                }
+            }
             obj[h] = val;
         });
         return obj;
@@ -205,6 +221,10 @@ function deleteRowsById(sheet, ids) {
     const headers = data[0];
     const colId = findColumnIndex(headers, ['id', 'patientId', 'key']); 
     const searchIdx = colId !== -1 ? colId : 0; 
+
+    if (colId === -1) {
+        Logger.log("[deleteRowsById] WARNING: Primary ID column not found. Using Index 0 as fallback.");
+    }
 
     // Search from bottom to top to avoid index shifts
     for (let i = data.length - 1; i >= 1; i--) {

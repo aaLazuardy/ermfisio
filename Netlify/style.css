@@ -309,7 +309,30 @@ body.print-relaxed .gap-6 {
   gap: 20px !important;
 }
 
-/* --- TOAST NOTIFICATION --- */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+#sync-banner button {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}
+
+#sync-banner button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* --- TOAST STYLES --- */
 .toast-item {
   animation: slideInUp 0.3s ease-out forwards;
   backdrop-filter: blur(8px);
