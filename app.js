@@ -75,7 +75,6 @@ let state = {
 let currentTemplateCategory = 'Semua';
 let currentTemplateRegion = 'Semua';
 let templateSearchQuery = '';
-let selectedExercises = [];
 window.tempFormData = {};
 
 // --- 2. HELPER FUNCTIONS ---
@@ -348,7 +347,11 @@ async function checkLicense() {
                 // AUTO-CONFIG: If server returns sheet_id, auto-connect!
                 if (result.sheet_id) {
                     const autoUrl = `https://docs.google.com/spreadsheets/d/${result.sheet_id}/edit`;
-                    if (autoUrl !== state.scriptUrl || result.sheet_id !== state.sheetId) {
+                    // PROTECT: Only overwrite if we don't have a valid local sheetId yet, 
+                    // or if the server explicitly provides a DIFFERENT id (and we are not in the middle of a manual edit)
+                    const isManualConflict = state.sheetId && state.sheetId !== result.sheet_id;
+
+                    if (!state.sheetId || (!isManualConflict && autoUrl !== state.scriptUrl)) {
                         localStorage.setItem('erm_script_url', autoUrl);
                         localStorage.setItem('erm_sheet_id', result.sheet_id);
                         state.scriptUrl = autoUrl;
@@ -629,16 +632,16 @@ function checkOnlineStatus() {
 
 // Sync Toasts removed logic
 
-function showToast(message, type = 'success') {
+function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
     const toast = document.createElement('div');
     const colors = {
-        success: 'bg-white border-emerald-500 text-emerald-800',
-        error: 'bg-white border-red-500 text-red-800',
-        info: 'bg-white border-blue-500 text-blue-800',
-        warning: 'bg-white border-amber-500 text-amber-800'
+        success: 'bg-emerald-50 border-emerald-500 text-emerald-800',
+        error: 'bg-rose-50 border-rose-500 text-rose-800',
+        info: 'bg-blue-50 border-blue-500 text-blue-800',
+        warning: 'bg-amber-50 border-amber-500 text-amber-800'
     };
 
     const icons = {
@@ -664,7 +667,53 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// --- 4. SYNC FUNCTIONS ---
+function showSyncBanner() {
+    // Check if banner already exists
+    if (document.getElementById('sync-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'sync-banner';
+    banner.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-bounce-short';
+    banner.innerHTML = `
+        <button onclick="this.parentElement.remove(); navigate(state.currentView);" 
+            class="flex items-center gap-3 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl hover:bg-slate-800 transition-all border border-slate-700 font-bold text-sm tracking-wide">
+            <i data-lucide="refresh-cw" width="18" class="animate-spin-slow"></i>
+            <span>Ada data booking baru! Klik untuk perbarui.</span>
+        </button>
+    `;
+    document.body.appendChild(banner);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function normalizeDate(s) {
+    if (!s) return "";
+    if (typeof s !== 'string') return s;
+    if (s.includes("-")) return s; // already yyyy-MM-dd
+    if (s.includes("/")) {
+        let parts = s.split("/");
+        if (parts[2] && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+    }
+    return s;
+}
+
+function normalizeTime(val) {
+    if (!val) return "";
+    let s = String(val).trim();
+    if (s.includes(" ")) {
+        let timePart = s.split(" ")[1];
+        if (timePart) s = timePart;
+    }
+    if (s.includes(":") || s.includes(".")) {
+        let parts = s.split(/[:\.]/);
+        let HH = parts[0].padStart(2, '0');
+        let mm = (parts[1] || "00").substring(0, 2).padStart(2, '0');
+        return `${HH}:${mm}`;
+    }
+    return s;
+}
+
 // Helper to extract ID from URL
 function getSheetIdFromUrl(url) {
     if (!url) return null;
@@ -757,7 +806,7 @@ async function syncDelta() {
     }
 
     try {
-        await fetch(LICENSE_API_URL, {
+        const response = await fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
@@ -773,13 +822,19 @@ async function syncDelta() {
             })
         });
 
-        // Clear deletedIds on success
-        state.deletedIds = { patients: [], assessments: [], appointments: [], expenses: [], packages: [] };
-        localStorage.setItem('erm_last_sync', new Date().toISOString());
-        saveData(); // Persist the cleared deletedIds
-        updateSyncStatusUI(false);
+        const res = await response.json();
+
+        // ONLY clear deletedIds if the server confirms success
+        if (response.ok && res.status === 'success') {
+            state.deletedIds = { patients: [], assessments: [], appointments: [], expenses: [], packages: [] };
+            localStorage.setItem('erm_last_sync', new Date().toISOString());
+            saveData(); // Persist the cleared deletedIds
+            updateSyncStatusUI(false);
+        } else {
+            console.error("Delta Sync Server Error:", res.message || "Unknown error");
+        }
     } catch (e) {
-        console.error("Delta sync failed", e);
+        console.error("Delta sync failed (check connection):", e);
     } finally {
         state._syncing = false;
     }
@@ -840,11 +895,16 @@ async function pullDataFromSheet() {
         }
 
         if (data.patients && data.assessments) {
-            state.patients = data.patients;
-            state.assessments = sanitizeAssessments(data.assessments);
-            if (data.appointments) state.appointments = data.appointments;
-            if (data.expenses) state.expenses = data.expenses;
-            if (data.packages) state.packages = data.packages;
+            const cleanup = (list, cat) => {
+                const deletedList = state.deletedIds[cat] || [];
+                return (list || []).filter(item => !deletedList.includes(item.id));
+            };
+
+            state.patients = cleanup(data.patients, 'patients');
+            state.assessments = sanitizeAssessments(cleanup(data.assessments, 'assessments'));
+            if (data.appointments) state.appointments = deduplicateAppointments(cleanup(data.appointments, 'appointments'));
+            if (data.expenses) state.expenses = cleanup(data.expenses, 'expenses');
+            if (data.packages) state.packages = cleanup(data.packages, 'packages');
 
             // Sync Config if available
             if (data.config && Array.isArray(data.config)) {
@@ -870,7 +930,10 @@ async function pullDataFromSheet() {
             }
 
             saveData();
-            alert('✅ Data berhasil ditarik dari Cloud!');
+            // Re-render current view 
+            navigate(state.currentView);
+
+            showToast('Semua data berhasil ditarik dari Cloud!', 'success');
             renderApp();
             applyBranding();
         } else {
@@ -958,18 +1021,32 @@ async function backgroundAutoSync() {
         const data = await response.json();
 
         if (data.patients && data.assessments) {
+            // Proactive Cleanup: Ensure any locally pending deletes are removed from current state BEFORE merging
+            const cleanup = (list, deletedList) => (list || []).filter(item => !deletedList.includes(item.id));
+            state.patients = cleanup(state.patients, state.deletedIds.patients);
+            state.assessments = cleanup(state.assessments, state.deletedIds.assessments);
+            state.appointments = cleanup(state.appointments, state.deletedIds.appointments);
+            state.expenses = cleanup(state.expenses, state.deletedIds.expenses);
+            state.packages = cleanup(state.packages, state.deletedIds.packages);
+
             // MERGE LOGIC FOR DELTA SYNC OR OVERWRITE FOR PULL
             if (action === 'pull') {
-                state.patients = data.patients;
-                state.assessments = sanitizeAssessments(data.assessments);
-                if (data.appointments) state.appointments = data.appointments;
-                if (data.expenses) state.expenses = data.expenses;
-                if (data.packages) state.packages = data.packages;
+                state.patients = cleanup(data.patients, state.deletedIds.patients);
+                state.assessments = sanitizeAssessments(cleanup(data.assessments, state.deletedIds.assessments));
+                if (data.appointments) state.appointments = cleanup(data.appointments, state.deletedIds.appointments);
+                if (data.expenses) state.expenses = cleanup(data.expenses, state.deletedIds.expenses);
+                if (data.packages) state.packages = cleanup(data.packages, state.deletedIds.packages);
             } else {
                 // Merge Data by ID
-                const mergeArr = (localArr, incomingArr) => {
+                const mergeArr = (localArr, incomingArr, category) => {
                     if (!incomingArr || incomingArr.length === 0) return localArr;
                     incomingArr.forEach(inc => {
+                        // FIX: Logic Filter (Ignore if ID is already in local deletion queue)
+                        if (state.deletedIds[category] && state.deletedIds[category].includes(inc.id)) {
+                            console.log(`Sync Skip: ${category} ${inc.id} is marked for deletion locally.`);
+                            return;
+                        }
+
                         const idx = localArr.findIndex(loc => loc.id === inc.id);
                         if (idx !== -1) localArr[idx] = inc;
                         else localArr.push(inc);
@@ -977,11 +1054,11 @@ async function backgroundAutoSync() {
                     return localArr;
                 };
 
-                state.patients = mergeArr(state.patients || [], data.patients);
-                state.assessments = sanitizeAssessments(mergeArr(state.assessments || [], data.assessments));
-                if (data.appointments) state.appointments = mergeArr(state.appointments || [], data.appointments);
-                if (data.expenses) state.expenses = mergeArr(state.expenses || [], data.expenses);
-                if (data.packages) state.packages = mergeArr(state.packages || [], data.packages);
+                state.patients = mergeArr(state.patients || [], data.patients, 'patients');
+                state.assessments = sanitizeAssessments(mergeArr(state.assessments || [], data.assessments, 'assessments'));
+                state.appointments = deduplicateAppointments(mergeArr(state.appointments || [], data.appointments, 'appointments'));
+                if (data.expenses) state.expenses = mergeArr(state.expenses || [], data.expenses, 'expenses');
+                if (data.packages) state.packages = mergeArr(state.packages || [], data.packages, 'packages');
             }
 
             // Sync Config if available
@@ -1021,8 +1098,13 @@ async function backgroundAutoSync() {
                 (data.assessments && data.assessments.length > 0) ||
                 (data.appointments && data.appointments.length > 0)) {
                 showToast('Sync Selesai ✅', 'success');
-                // Re-render current view if needed
-                if (state.currentView !== 'login') renderApp();
+            }
+
+            // Option 1: Show Banner instead of forced refresh
+            if (data.patients?.length > 0 || data.assessments?.length > 0 || data.appointments?.length > 0) {
+                if (state.currentView === 'dashboard' || state.currentView === 'schedule') {
+                    showSyncBanner();
+                }
             }
         }
     } catch (error) {
@@ -1164,7 +1246,7 @@ function renderApp() {
 function renderDashboard(container) {
     const count = state.assessments.length;
     const today = new Date().toISOString().slice(0, 10);
-    const todayAppointments = state.appointments.filter(a => a.date === today);
+    const todayAppointments = state.appointments.filter(a => normalizeDate(a.date) === today);
     const todayIncome = (state.appointments || [])
         .filter(a => {
             const isPaid = (a.paymentStatus || '').toUpperCase() === 'PAID';
@@ -1172,7 +1254,7 @@ function renderDashboard(container) {
             return (isPaid || isLegacyPaid) && (a.paidAt || a.date) && (a.paidAt || a.date).slice(0, 10) === today;
         })
         .reduce((sum, a) => sum + (Number(a.finalAmount) || Number(a.fee) || 0), 0);
-    const unpaidToday = (state.appointments || []).filter(a => a.date === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
+    const unpaidToday = (state.appointments || []).filter(a => normalizeDate(a.date) === today && (a.status === 'CONFIRMED' || !a.status) && (a.paymentStatus || '').toUpperCase() !== 'PAID').length;
     const formatRp = (num) => 'Rp ' + num.toLocaleString('id-ID');
 
     container.innerHTML = `
@@ -1256,7 +1338,7 @@ function renderScheduleView(container) {
         const day = i + 1;
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-        const dayAppts = monthAppts.filter(a => a.date === dateStr);
+        const dayAppts = monthAppts.filter(a => normalizeDate(a.date) === dateStr).sort((a, b) => (normalizeTime(a.time) || '').localeCompare(normalizeTime(b.time) || ''));
 
         return `
                         <div id="day-${dateStr}" data-date="${dateStr}" class="calendar-day-cell min-h-[100px] p-2 hover:bg-blue-50 transition-colors cursor-pointer group relative border border-transparent rounded-lg">
@@ -1906,7 +1988,7 @@ function renderAssessmentForm(container, useTempData = false) {
                             </div>
                             <div class="md:col-span-2">
                                 <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col">
-                                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2"><h3 class="font-bold text-slate-800 uppercase text-sm">Intervensi Fisioterapi</h3><button onclick="openHEPModal()" class="text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 px-3 py-1.5 rounded-lg font-bold border border-purple-200 flex items-center gap-1 transition-colors"><i data-lucide="dumbbell" width="14"></i> Buat PR Latihan</button></div>
+                                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2"><h3 class="font-bold text-slate-800 uppercase text-sm">Intervensi Fisioterapi</h3></div>
                                     <div class="flex-1">${renderCheckboxGroup('intervention', data.intervention)}</div>
                                     <div class="mt-4 pt-3 border-t border-slate-100 flex gap-2"><input type="text" id="custom-intervention" placeholder="+ Tambah intervensi manual..." class="flex-1 text-sm border border-slate-300 rounded-lg px-3 py-2 focus:border-blue-500 outline-none" onkeydown="if(event.key === 'Enter') addCustomItem('intervention')"><button type="button" onclick="addCustomItem('intervention')" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 rounded-lg text-sm font-bold transition-colors">Add</button></div>
                                 </div>
@@ -2673,6 +2755,35 @@ function saveAppointment() {
     }
 }
 
+/**
+ * Utility to prevent duplicates in local state
+ */
+function deduplicateAppointments(arr) {
+    if (!arr || arr.length === 0) return [];
+    const map = new Map();
+    // Sort by updatedAt descending to keep newest in case of conflict
+    const sorted = [...arr].sort((a, b) => {
+        const t1 = new Date(a.updatedAt || 0).getTime();
+        const t2 = new Date(b.updatedAt || 0).getTime();
+        return t2 - t1;
+    });
+
+    const unique = [];
+    const seenKeys = new Set();
+
+    sorted.forEach(item => {
+        // Business logic unique key: same patient, same date, same time
+        const key = `${item.patientId}_${item.date}_${item.time}`;
+        if (!seenKeys.has(item.id) && !seenKeys.has(key)) {
+            unique.push(item);
+            seenKeys.add(item.id);
+            seenKeys.add(key);
+        }
+    });
+
+    return unique.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+
 function generateSeries(startDate, count, freq) {
     const dates = [];
     const current = new Date(startDate);
@@ -2691,7 +2802,7 @@ function confirmAppointment(id, fromUrl = false) {
         state.appointments[idx].updatedAt = new Date().toISOString();
         saveData();
         if (state.scriptUrl) syncDelta();
-        if (state.scriptUrl) pushDataToSheet();
+        // REMOVED: pushDataToSheet() call here is dangerous and causes deleted items to reappear from stale clients.
 
         // Notify Admin or Patient if needed
         if (fromUrl) {
@@ -2762,7 +2873,6 @@ function deleteAppointment(id, fromUrl = false) {
 function finalizeSave() {
     saveData();
     if (state.scriptUrl) syncDelta();
-    if (state.scriptUrl) pushDataToSheet();
     closeModal();
     document.getElementById('choice-modal').classList.add('hidden');
     if (state.currentView === 'schedule') renderScheduleView(document.getElementById('main-content'));
@@ -2885,7 +2995,7 @@ function submitPatientForm() {
     else state.patients.push(newP);
 
     saveData();
-    if (state.scriptUrl) pushDataToSheet();
+    if (state.scriptUrl) syncDelta();
     closeModal();
     renderPatientList(document.getElementById('main-content'));
 }
@@ -3204,7 +3314,9 @@ function renderConfigView(container) {
                     <div class="bg-white p-6 rounded-xl shadow border border-slate-200">
                         <h3 class="font-bold text-lg text-slate-800 mb-2">Integrasi Cloud Storage</h3>
                         <p class="text-xs text-slate-500 mb-2">Masukkan URL Spreadsheet Google milik Klinik.</p>
-                        <input type="text" id="script-url" value="${state.scriptUrl}" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full border p-2 rounded text-xs font-mono bg-slate-50 mb-3">
+                        <input type="text" id="script-url" value="${state.scriptUrl}" 
+                            oninput="const id=getSheetIdFromUrl(this.value); if(id) document.getElementById('conf-sheet-id').value=id;"
+                            placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full border p-2 rounded text-xs font-mono bg-slate-50 mb-3">
                         
                         <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Google Sheet ID (Otomatis/Manual)</label>
                         <input type="text" id="conf-sheet-id" value="${state.sheetId}" placeholder="1abc123..." class="w-full border p-2 rounded text-xs font-mono bg-white mb-1">
@@ -3550,6 +3662,9 @@ function saveConfig() {
     localStorage.setItem('erm_script_url', state.scriptUrl);
     localStorage.setItem('erm_sheet_id', state.sheetId);
 
+    // Refresh license status immediately to register the new sheet ID on the Master server
+    refreshLicenseStatus();
+
     alert('Konfigurasi Cloud Tersimpan!');
     if (document.getElementById('conf-sheet-id')) {
         document.getElementById('conf-sheet-id').value = state.sheetId;
@@ -3676,86 +3791,6 @@ function saveOutcomeToNote() {
         const textArea = document.getElementById('form-custom-assessment');
         if (textArea) textArea.value = newText;
         closeModal();
-    }
-}
-
-function openHEPModal() {
-    selectedExercises = [];
-    const categories = Object.keys(EXERCISE_DB);
-    const modalHtml = `
-        <div class="bg-white h-[90vh] flex flex-col rounded-2xl overflow-hidden fade-in">
-            <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50"><div><h3 class="text-xl font-bold text-slate-800 flex items-center gap-2"><i data-lucide="dumbbell" class="text-purple-600"></i> Program Latihan (HEP)</h3></div><button onclick="closeModal()" class="bg-slate-200 p-2 rounded-full text-slate-500 hover:bg-slate-300"><i data-lucide="x" width="20"></i></button></div>
-            <div class="flex-1 overflow-hidden flex flex-col md:flex-row">
-                <div class="w-full md:w-48 bg-slate-50 border-r border-slate-200 overflow-y-auto p-2">${categories.map((cat, idx) => `<button onclick="document.getElementById('cat-${idx}').scrollIntoView({behavior: 'smooth'})" class="w-full text-left text-xs font-bold px-3 py-3 rounded-lg text-slate-600 hover:bg-purple-100 hover:text-purple-700 mb-1 transition-colors">${cat}</button>`).join('')}</div>
-                <div class="flex-1 overflow-y-auto p-6 bg-white scroll-smooth" id="hep-list-area">${categories.map((cat, idx) => `<div id="cat-${idx}" class="mb-8"><h4 class="text-sm font-black text-purple-700 uppercase mb-3 sticky top-0 bg-white py-2 z-10 border-b border-purple-100">${cat}</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${EXERCISE_DB[cat].map((ex, exIdx) => `<div onclick="toggleHEP(this, '${cat}', ${exIdx})" class="hep-item border border-slate-200 rounded-xl p-3 cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-all group select-none relative"><div class="flex justify-between items-start"><h5 class="font-bold text-slate-700 text-sm group-hover:text-purple-800 pr-6">${ex.name}</h5><div class="w-6 h-6 rounded-full border-2 border-slate-300 flex items-center justify-center hep-check transition-all bg-white absolute top-3 right-3"><i data-lucide="check" width="14" class="text-white opacity-0 transition-opacity"></i></div></div><p class="text-xs text-slate-500 mt-2 leading-relaxed">${ex.desc}</p></div>`).join('')}</div></div>`).join('')}</div>
-            </div>
-            <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center"><p class="text-sm font-bold text-slate-600">Terpilih: <span id="hep-count" class="text-purple-600 font-black text-lg">0</span> item</p><div class="flex gap-2"><button onclick="copyHEP()" class="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-600 flex items-center gap-2 btn-press"><i data-lucide="copy" width="16"></i> Salin</button><button onclick="sendHEP('wa')" class="bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-600 flex items-center gap-2 btn-press"><i data-lucide="message-circle" width="16"></i> WA</button></div></div>
-        </div>`;
-    document.getElementById('modal-content').innerHTML = modalHtml;
-    document.getElementById('modal-container').classList.remove('hidden');
-    lucide.createIcons();
-}
-
-function toggleHEP(el, cat, idx) {
-    const exercise = EXERCISE_DB[cat][idx];
-    const checkIcon = el.querySelector('.hep-check i');
-    const checkBox = el.querySelector('.hep-check');
-    const existsIdx = selectedExercises.findIndex(e => e.name === exercise.name);
-
-    if (existsIdx > -1) {
-        selectedExercises.splice(existsIdx, 1);
-        el.classList.remove('ring-2', 'ring-purple-500', 'bg-purple-50');
-        checkBox.classList.remove('bg-purple-600', 'border-purple-600');
-        checkIcon.classList.add('opacity-0');
-    } else {
-        selectedExercises.push(exercise);
-        el.classList.add('ring-2', 'ring-purple-500', 'bg-purple-50');
-        checkBox.classList.add('bg-purple-600', 'border-purple-600');
-        checkIcon.classList.remove('opacity-0');
-    }
-    document.getElementById('hep-count').innerText = selectedExercises.length;
-}
-
-function generateHEPMessage() {
-    const pName = state.selectedPatient.name;
-    const therapist = state.user.name;
-    const dateNow = new Date().toLocaleDateString('id-ID');
-    let msg = `*PROGRAM LATIHAN (HEP)*\r\n------------------\r\nTgl: ${dateNow}\r\nPasien: ${pName}\r\nTerapis: ${therapist}\r\n------------------\r\n\r\n`;
-    selectedExercises.forEach((ex, i) => { msg += `*${i + 1}. ${ex.name.toUpperCase()}*\r\n> _${ex.desc}_\r\n\r\n`; });
-    msg += `------------------\r\n*CATATAN:*\r\n1. Lakukan rutin sesuai anjuran.\r\n2. Stop jika nyeri tajam.\r\n\r\n_Semoga lekas membaik!_`;
-    return msg;
-}
-
-function sendHEP(platform) {
-    if (selectedExercises.length === 0) { alert('Pilih minimal satu latihan dulu!'); return; }
-    const msg = generateHEPMessage();
-    const encodedMsg = encodeURIComponent(msg);
-    if (platform === 'wa') {
-        let phone = state.selectedPatient.phone;
-        if (phone) {
-            phone = phone.replace(/\D/g, '');
-            if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-            window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
-        } else { window.open(`https://wa.me/?text=${encodedMsg}`, '_blank'); }
-    }
-    saveHEPLog();
-    closeModal();
-}
-
-function copyHEP() {
-    if (selectedExercises.length === 0) { alert('Pilih minimal satu latihan dulu!'); return; }
-    navigator.clipboard.writeText(generateHEPMessage()).then(() => {
-        alert('Teks berhasil disalin!');
-        saveHEPLog();
-        closeModal();
-    });
-}
-
-function saveHEPLog() {
-    const hepNote = `HEP Dikirim (${selectedExercises.length} latihan)`;
-    if (!window.tempFormData.intervention.includes(hepNote)) {
-        window.tempFormData.intervention.push(hepNote);
-        updateGroupUI('intervention');
     }
 }
 
