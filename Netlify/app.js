@@ -3700,6 +3700,20 @@ function saveUser() {
     const role = form.querySelector('[name="role"]').value;
 
     if (!name || !username || !password) { alert('Semua kolom wajib diisi!'); return; }
+
+    // ROLE PROTECTION: Jika user ini adalah ADMIN dan dia adalah satu-satunya ADMIN, 
+    // jangan biarkan rolenya diubah menjadi FISIO.
+    if (id) {
+        const currentUser = state.users.find(x => x.id === id);
+        if (currentUser && currentUser.role === 'ADMIN' && role !== 'ADMIN') {
+            const adminCount = state.users.filter(u => u.role === 'ADMIN').length;
+            if (adminCount <= 1) {
+                alert("⚠️ GAGAL: Tidak bisa mengubah role Administrator terakhir!\nSistem memerlukan minimal 1 Administrator aktif.");
+                return;
+            }
+        }
+    }
+
     if (state.users.some(u => u.username === username && u.id !== id)) { alert('Username sudah dipakai!'); return; }
 
     if (id) {
@@ -4295,11 +4309,27 @@ async function verifyResetCode() {
                     await new Promise(r => setTimeout(r, 1500));
                 } catch (e) { console.error("Confirm reset error:", e); }
             }
+            // Hapus dari LocalStorage
             localStorage.removeItem('erm_users');
+            // Hapus dari IndexedDB (Store users)
+            if (window.fisiotaDB) {
+                await window.fisiotaDB.delete('users');
+            }
             alert("✅ RESET BERHASIL! User dikembalikan ke default.");
             location.reload();
         }
     } else { alert("❌ KODE SALAH!"); }
+}
+
+async function resetUserToDefault() {
+    if (confirm("⚠️ PERINGATAN: Semua akun user custom akan dihapus dan dikembalikan ke default (admin/123).\n\nLanjutkan?")) {
+        localStorage.removeItem('erm_users');
+        if (window.fisiotaDB) {
+            await window.fisiotaDB.delete('users');
+        }
+        alert("✅ User telah direset ke default.");
+        location.reload();
+    }
 }
 
 // --- 19. INITIALIZATION ---
