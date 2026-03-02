@@ -184,8 +184,18 @@ function buildReminderMessages(appointments, patientMap, dateStr, clinicInfo, co
 
     appointments.forEach((a, index) => {
         const p = patientMap.get(a.patientId) || { name: 'Unknown', phone: '', category: 'Umum', diagnosis: '-' };
-        const fee = parseFloat(String(a.fee || "0").replace(/\./g, "")) || parseFloat(String(p.defaultFee || "0").replace(/\./g, "")) || 0;
-        totalOmzet += fee;
+        
+        // 1. FILTER: HANYA HITUNG YANG TIDAK BATAL (Sesuai Dashboard & Kasir)
+        const appStatus = String(a.status || "").toUpperCase();
+        const isCancelled = appStatus === 'CANCELLED' || appStatus === 'REJECTED';
+        
+        // 2. LOGIKA BIAYA: PRIORITAS finalAmount (Setelah Diskon) -> fee -> defaultFee
+        const rawFee = a.finalAmount || a.fee || p.defaultFee || "0";
+        const fee = parseFloat(String(rawFee).replace(/[^\d]/g, "")) || 0;
+        
+        if (!isCancelled) {
+            totalOmzet += fee;
+        }
 
         // Emoji berdasarkan kategori
         const categoryStr = String(p.category || 'Umum').toLowerCase();
