@@ -45,6 +45,7 @@ let state = {
         subname: 'Physiotherapy & Rehab',
         therapist: 'Fisio',
         sipf: 'SIPF: ....................',
+        city: 'Blitar',
         address: 'Jl. Contoh No.1, Kota, Provinsi',
         phone: '',
         mapsUrl: ''
@@ -263,7 +264,7 @@ async function loadData() {
 
         // Data Pasien Dummy jika kosong total
         if (state.patients.length === 0) {
-            state.patients = [{ id: 'PX-0001', name: 'Contoh Pasien', gender: 'L', dob: '1980-05-12', phone: '08123456789', job: 'Guru', address: 'Jl. Merdeka No. 45, Blitar', diagnosis: 'Cervical Syndrome (M53.1)', quota: 0, defaultFee: 0 }];
+            state.patients = [{ id: 'PX-0001', name: 'Contoh Pasien', gender: 'L', dob: '1980-05-12', phone: '08123456789', job: 'Guru', address: 'Jl. Merdeka No. 45, Kota Anda', diagnosis: 'Cervical Syndrome (M53.1)', quota: 0, defaultFee: 0 }];
             await window.fisiotaDB.save('patients', state.patients);
         }
 
@@ -3152,6 +3153,7 @@ function renderConfigView(container) {
                     <div class="space-y-4">
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Klinik (Judul)</label><input type="text" id="conf-name" value="${state.clinicInfo?.name || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Sub-Judul / Tagline</label><input type="text" id="conf-sub" value="${state.clinicInfo?.subname || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
+                        <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Domisili / Kota Klinik</label><input type="text" id="conf-city" value="${state.clinicInfo?.city || ''}" placeholder="Contoh: Blitar" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"></div>
                         <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Nama Fisioterapis (Ttd)</label><input type="text" id="conf-therapist" value="${state.clinicInfo?.therapist || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"></div>
                     </div>
                     <div class="space-y-4">
@@ -3348,6 +3350,7 @@ async function saveClinicConfig() {
     state.clinicInfo = {
         name: document.getElementById('conf-name').value,
         subname: document.getElementById('conf-sub').value,
+        city: document.getElementById('conf-city').value,
         therapist: document.getElementById('conf-therapist').value,
         sipf: document.getElementById('conf-sipf').value,
         address: document.getElementById('conf-address').value,
@@ -3375,6 +3378,7 @@ async function saveClinicConfig() {
             const configItems = [
                 { key: 'CLINIC_NAME', value: state.clinicInfo.name },
                 { key: 'CLINIC_SUBNAME', value: state.clinicInfo.subname },
+                { key: 'CLINIC_CITY', value: state.clinicInfo.city },
                 { key: 'CLINIC_THERAPIST', value: state.clinicInfo.therapist },
                 { key: 'CLINIC_SIPF', value: state.clinicInfo.sipf },
                 { key: 'CLINIC_ADDRESS', value: state.clinicInfo.address },
@@ -4221,7 +4225,7 @@ function generateSingleAssessmentHTML(a, p) {
             </div>
         </div>` : ''}
 
-        ${conf.showSignature ? `<div class="mt-8 flex justify-end break-inside-avoid"><div class="w-48 text-center"><p class="text-slate-500 mb-12 text-[0.8em]">Blitar, ${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p class="font-bold text-slate-900 border-b border-slate-400 inline-block pb-0.5">${state.clinicInfo.therapist}</p><p class="text-slate-500 mt-1 text-[0.7em]">SIPF: ${state.clinicInfo.sipf}</p></div></div>` : ''}
+        ${conf.showSignature ? `<div class="mt-8 flex justify-end break-inside-avoid"><div class="w-48 text-center"><p class="text-slate-500 mb-12 text-[0.8em]">${state.clinicInfo.city || 'Blitar'}, ${new Date(a.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p class="font-bold text-slate-900 border-b border-slate-400 inline-block pb-0.5">${state.clinicInfo.therapist}</p><p class="text-slate-500 mt-1 text-[0.7em]">SIPF: ${state.clinicInfo.sipf}</p></div></div>` : ''}
     </div>`;
 }
 
@@ -4235,18 +4239,20 @@ async function requestResetCode(e) {
     const originalText = btn.innerText;
     btn.innerText = "Mengirim..."; btn.disabled = true;
 
-    // Get current sheet_id from URL or state
-    const currentSheetId = getSheetIdFromUrl(window.location.href) || state.scriptUrl.split('id=')[1] || '';
+    // Get current sheet_id and clinic info
+    const currentSheetId = (state.scriptUrl && state.scriptUrl.includes('id=')) ? state.scriptUrl.split('id=')[1] : (state.sheetId || '');
+    const clinicName = state.clinicInfo ? state.clinicInfo.name : "Unknown Clinic";
 
     try {
         await fetch(LICENSE_API_URL, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Use text/plain to bypass CORS Preflight
             body: JSON.stringify({
                 action: 'log_reset',
                 code: tempResetCode,
                 sheet_id: currentSheetId,
+                clinic_name: clinicName,
                 deviceInfo: navigator.userAgent,
                 timestamp: new Date().toLocaleString()
             })
@@ -4273,7 +4279,22 @@ async function verifyResetCode() {
     const inputCode = document.getElementById('otp-input').value;
     if (inputCode === tempResetCode) {
         if (confirm("Kode Benar! Hapus semua user custom?")) {
-            if (state.scriptUrl) { try { await fetch(state.scriptUrl, { method: 'POST', mode: 'cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'confirm_reset', code: inputCode }) }); await new Promise(r => setTimeout(r, 2000)); } catch (e) { } }
+            const currentSheetId = (state.scriptUrl && state.scriptUrl.includes('id=')) ? state.scriptUrl.split('id=')[1] : (state.sheetId || '');
+            if (LICENSE_API_URL) {
+                try {
+                    await fetch(LICENSE_API_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'confirm_reset',
+                            code: inputCode,
+                            sheet_id: currentSheetId
+                        })
+                    });
+                    await new Promise(r => setTimeout(r, 1500));
+                } catch (e) { console.error("Confirm reset error:", e); }
+            }
             localStorage.removeItem('erm_users');
             alert("✅ RESET BERHASIL! User dikembalikan ke default.");
             location.reload();
