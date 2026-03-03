@@ -4,8 +4,17 @@
  * Deskrpsi: Logika Pembuatan, Validasi, dan Cleanup Lisensi.
  */
 
+function slugify(text) {
+  return text.toString().toLowerCase()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+    .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+    .replace(/^-+/, '')             // Trim - from start of text
+    .replace(/-+$/, '');            // Trim - from end of text
+}
+
 // Fungsi generateNewLicense dipanggil dari Sidebar
-function generateNewLicense(clientName, durationType) {
+function generateNewLicense(clientName, durationType, email, whatsapp) {
     if (!clientName) throw new Error("Nama Klien Kosong");
 
     // 🔒 LICENSE DATA MUST BE ON ADMIN SHEET (Script Bound), NOT Client Sheet
@@ -47,14 +56,24 @@ function generateNewLicense(clientName, durationType) {
     const key = `FISIO-${code.substring(0, 4)}-${code.substring(4, 8)}`;
 
     // Simpan ke Sheet
+    const alias = slugify(clientName);
+    const dateNow = Utilities.formatDate(now, TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+    const expiryFmt = Utilities.formatDate(expireDate, TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+
     sheet.appendRow([
         key,
         planName,
         clientName,
-        Utilities.formatDate(now, TIMEZONE, "yyyy-MM-dd HH:mm:ss"),
-        Utilities.formatDate(expireDate, TIMEZONE, "yyyy-MM-dd HH:mm:ss"),
+        dateNow,
+        expiryFmt,
         "ACTIVE",
-        "" // Col 7: sheet_id (Filled upon verification)
+        "",        // Col 7: sheet_id
+        alias,     // Col 8: alias
+        "",        // Col 9: available_hours
+        "",        // Col 10: off_days (NEW)
+        whatsapp,  // Col 11: whatsapp
+        email,     // Col 12: email
+        dateNow    // Col 13: updated_at
     ]);
 
     return {
@@ -62,7 +81,7 @@ function generateNewLicense(clientName, durationType) {
         key: key,
         plan: planName,
         expiry: Utilities.formatDate(expireDate, TIMEZONE, "dd MMM yyyy HH:mm"),
-        expiry_iso: Utilities.formatDate(expireDate, TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss")
+        expiry_iso: Utilities.formatDate(expireDate, TIMEZONE, "yyyy-MM-dd HH:mm:ss")
     };
 }
 
@@ -177,31 +196,148 @@ function resolveClinicAlias(alias) {
   }
 }
 
-function registerClinicAlias(licenseKey, alias, sheetId) {
+
+
+/**
+ * [BARU] Mengambil daftar unik nama klinik untuk dropdown Renew
+ */
+function getExistingClients() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  checkAndFixColumns(ss, true); // Pastikan header terbaru ada (WA, Email, Updated_at)
   const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
-  if (!sheet) return createJSONOutput({ status: 'error', message: 'Tab Licenses tidak ditemukan.' });
+  if (!sheet) return [];
   
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const normalize = (s) => String(s).toLowerCase().replace(/[\s_]/g, "");
-  const headersNormalized = headers.map(normalize);
-
-  const colKey = 0;
-  const colSheetId = headersNormalized.indexOf(normalize('sheet_id'));
-  const colAlias = headersNormalized.indexOf(normalize('alias'));
-
-  if (colAlias === -1 || colSheetId === -1) return createJSONOutput({ status: 'error', message: 'Struktur Master tidak lengkap.' });
+  const colName = findColumnIndex(headers, ['client_name', 'nama_klien']);
   
-  // Cari baris berdasarkan License Key
-  const rowIndex = data.findIndex(r => String(r[colKey]).trim() === String(licenseKey).trim());
+  if (colName === -1) return [];
+  
+  const names = data.slice(1).map(r => String(r[colName]).trim()).filter(n => n);
+  // Return unique sorted names
+  return [...new Set(names)].sort();
+}
 
-  if (rowIndex > -1) {
-    sheet.getRange(rowIndex + 1, colAlias + 1).setValue(alias);   
-    sheet.getRange(rowIndex + 1, colSheetId + 1).setValue(sheetId); 
-    
-    return createJSONOutput({ status: 'success', message: 'Data Klinik Berhasil Disambungkan!' });
-  } else {
-    return createJSONOutput({ status: 'error', message: 'Lisensi Tidak Valid' });
+/**
+ * [BARU] Perpanjang Lisensi (Metode REPLACE)
+ * Menemukan baris lama, menghitung masa aktif baru, dan menimpa data (tepat di baris tersebut).
+ */
+function renewLicense(clientName, durationType) {
+  Logger.log(`[Renew] Starting for: ${clientName} | Duration: ${durationType}`);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  checkAndFixColumns(ss, true);
+  const sheet = ss.getSheetByName(SHEET_NAMES.LICENSES);
+  if (!sheet) throw new Error("Tab Licenses tidak ditemukan.");
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const colName = findColumnIndex(headers, ['client_name', 'nama_klien']);
+  const colStatus = findColumnIndex(headers, ['status']);
+  const colExpiry = findColumnIndex(headers, ['expires_at', 'expired_at']);
+  const colUpdate = findColumnIndex(headers, ['updated_at']);
+  const colPlan   = findColumnIndex(headers, ['plan_name', 'paket']);
+  const colKey    = 0;
+
+  let rowIndex = -1;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][colName]).trim() === String(clientName).trim()) {
+      rowIndex = i + 1;
+      break;
+    }
   }
+
+  if (rowIndex === -1) throw new Error("Klinik tidak ditemukan di database.");
+  
+  const oldData = data[rowIndex - 1];
+  const oldKey = oldData[colKey];
+  const oldStatus = String(oldData[colStatus]).toUpperCase().trim();
+  
+  // Explicitly parse current expiry
+  let currentExpiry;
+  if (oldData[colExpiry] instanceof Date) {
+    currentExpiry = oldData[colExpiry];
+  } else {
+    currentExpiry = new Date(oldData[colExpiry]);
+    if (isNaN(currentExpiry.getTime())) {
+      Logger.log(`[Renew] Warning: Failed to parse old expiry "${oldData[colExpiry]}", using NOW.`);
+      currentExpiry = new Date();
+    }
+  }
+
+  const now = new Date();
+  const oldPlanName = String(oldData[colPlan] || "").toUpperCase();
+  const isCurrentlyLifetime = oldPlanName.includes("LIFETIME") || (currentExpiry.getFullYear() > (now.getFullYear() + 5));
+
+  // LOGIKA TANGGAL: 
+  // 1. Jika Plan Lama adalah LIFETIME (atau > 5thn lagi) DAN Plan Baru BUKAN Lifetime -> MULAI DARI SEKARANG (Reset).
+  // 2. Jika Masih ACTIVE dan belum expired -> Tambahkan dari EXPIRED lama.
+  // 3. Jika sudah EXPIRED atau Status SUSPENDED -> Mulai dari SEKARANG.
+  
+  let startDate;
+  if (isCurrentlyLifetime && durationType !== 'lifetime') {
+    Logger.log(`[Renew] Downgrade/Reset detected from Lifetime. Resetting start date to NOW.`);
+    startDate = new Date(now.getTime());
+  } else if (oldStatus === 'ACTIVE' && currentExpiry.getTime() > now.getTime()) {
+    startDate = new Date(currentExpiry.getTime());
+  } else {
+    startDate = new Date(now.getTime());
+  }
+  
+  Logger.log(`[Renew] Start Date calculated: ${startDate.toISOString()} (Old Expiry: ${currentExpiry.toISOString()}, IsLifetime: ${isCurrentlyLifetime})`);
+
+  let newExpiry = new Date(startDate.getTime());
+  let planName = "";
+
+  // Mapping Durasi
+  switch (durationType) {
+    case '7days':
+      newExpiry.setDate(newExpiry.getDate() + 7);
+      planName = "Trial 7 Hari";
+      break;
+    case '30days':
+      newExpiry.setMonth(newExpiry.getMonth() + 1);
+      planName = "Bulanan (30 Hari)";
+      break;
+    case '3months':
+      newExpiry.setMonth(newExpiry.getMonth() + 3);
+      planName = "Triwulan (3 Bulan)";
+      break;
+    case '1year':
+      newExpiry.setFullYear(newExpiry.getFullYear() + 1);
+      planName = "Tahunan (1 Tahun)";
+      break;
+    case 'lifetime':
+      newExpiry.setFullYear(newExpiry.getFullYear() + 100);
+      planName = "Lifetime";
+      break;
+    default:
+      throw new Error(`Durasi tidak dikenal: ${durationType}`);
+  }
+
+  Logger.log(`[Renew] New Expiry: ${newExpiry.toISOString()} | Plan: ${planName}`);
+
+  // Generate Key Baru (Random)
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  const newKey = `FISIO-${code.substring(0, 4)}-${code.substring(4, 8)}`;
+
+  // REPLACE: Update data di baris yang sama
+  const dateFmt = "yyyy-MM-dd HH:mm:ss";
+  sheet.getRange(rowIndex, colKey + 1).setValue(newKey);
+  sheet.getRange(rowIndex, colPlan + 1).setValue(planName);
+  sheet.getRange(rowIndex, colExpiry + 1).setValue(Utilities.formatDate(newExpiry, TIMEZONE, dateFmt));
+  sheet.getRange(rowIndex, colStatus + 1).setValue("ACTIVE");
+  sheet.getRange(rowIndex, colUpdate + 1).setValue(Utilities.formatDate(now, TIMEZONE, dateFmt));
+
+  Logger.log(`[Renew] Success. Updated Row ${rowIndex} with Key ${newKey}`);
+
+  return {
+    success: true,
+    key: newKey,
+    plan: planName,
+    expiry: Utilities.formatDate(newExpiry, TIMEZONE, "dd MMM yyyy HH:mm"),
+    expiry_iso: Utilities.formatDate(newExpiry, TIMEZONE, dateFmt)
+  };
 }

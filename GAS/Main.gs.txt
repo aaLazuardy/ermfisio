@@ -24,7 +24,7 @@ const HEADERS = {
     ASSESSMENTS: ['id', 'patientId', 'date', 'diagnosis', 'icd', 'icf_codes', 'custom_assessment', 'vas', 'fee', 'b', 's', 'd_act', 'd_part', 'obj', 'intervention', 'eval', 'plan', 'templateDefaults', 'bodyChart', 'pain_points', 'updatedAt'],
     APPOINTMENTS: ['id', 'patientId', 'date', 'time', 'therapistId', 'notes', 'groupId', 'fee', 'status', 'patientType', 'visitor_name', 'visitor_contact', 'updatedAt', 'paymentStatus', 'paymentMethod', 'discount', 'finalAmount', 'paidAt'],
     CONFIG: ['key', 'value', 'updated_at'],
-    LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours'],
+    LICENSES: ['key', 'plan_name', 'client_name', 'created_at', 'expires_at', 'status', 'sheet_id', 'alias', 'available_hours', 'off_days', 'whatsapp', 'email', 'updated_at'],
     EXPENSES: ['id', 'date', 'category', 'amount', 'notes', 'updatedAt'],
     PACKAGES: ['id', 'name', 'sessions', 'price', 'description', 'updatedAt']
 };
@@ -50,6 +50,14 @@ function normalizeTime(val) {
 }
 
 function onOpen() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Automatic Timezone Alignment
+    if (ss.getSpreadsheetTimeZone() !== TIMEZONE) {
+        ss.setSpreadsheetTimeZone(TIMEZONE);
+        Logger.log(`[System] Spreadsheet TimeZone aligned to: ${TIMEZONE}`);
+    }
+
     SpreadsheetApp.getUi()
         .createMenu('FISIOTA Admin')
         .addItem('🔐 Open License Manager', 'showLicenseSidebar')
@@ -112,12 +120,26 @@ function doGet(e) {
         const colName = findColumnIndex(headers, ['client_name', 'client name', 'nama_klinik', 'nama_klien']);
         const colSheetId = findColumnIndex(headers, ['sheet_id', 'sheet id', 'id_sheet']);
         const colHours = findColumnIndex(headers, ['available_hours', 'jam_tersedia', 'jam tersedia']);
+        const colOffDays = findColumnIndex(headers, ['off_days', 'hari_libur', 'hari libur']);
         
         if (colAlias === -1) return createJSONOutput({ status: 'error', message: 'Kolom Alias tidak ditemukan di tab Licenses.' });
         if (colStatus === -1) return createJSONOutput({ status: 'error', message: 'Kolom Status tidak ditemukan di tab Licenses.' });
         
         const row = data.find((r, i) => i > 0 && r[colAlias] && String(r[colAlias]).toLowerCase().trim() === String(alias).toLowerCase().trim() && String(r[colStatus]).trim() === 'ACTIVE');
         if (row) {
+            // Check Off Days (0=Minggu, 1=Senin, ...)
+            if (selectedDate && colOffDays !== -1) {
+                const offDaysStr = String(row[colOffDays] || "").trim();
+                if (offDaysStr) {
+                    const offDays = offDaysStr.split(',').map(d => d.trim());
+                    const reqDate = new Date(selectedDate);
+                    const dayOfWeek = reqDate.getDay().toString(); // 0-6
+                    if (offDays.includes(dayOfWeek)) {
+                        return createJSONOutput({ status: 'closed', message: 'Maaf, klinik libur di hari ini.' });
+                    }
+                }
+            }
+
             const defaultHours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
             let hoursRaw = colHours !== -1 ? String(row[colHours] || "").trim() : "";
             // Handle multiple separators just in case
@@ -325,6 +347,7 @@ function doPost(e) {
                 const colSheetId = findColumnIndex(headers, ['sheet_id', 'sheet id', 'id_sheet']);
                 const colAlias = findColumnIndex(headers, ['alias', 'alias_klinik']);
                 const colHours = findColumnIndex(headers, ['available_hours', 'jam_tersedia', 'jam tersedia']);
+                const colOffDays = findColumnIndex(headers, ['off_days', 'hari_libur', 'hari libur']);
                 
                 if (colSheetId === -1 || colAlias === -1 || colHours === -1) {
                    return createJSONOutput({ status: 'error', message: 'Kolom database Master tidak lengkap (Cek Sheet id/Alias/Hours).' });
@@ -355,24 +378,38 @@ function doPost(e) {
                 }
 
                 if (foundIndex !== -1) {
-                    Logger.log(`[save_booking_config] Match Found at Row ${foundIndex + 1}. Updating Alias: ${data.alias}, Hours: ${data.available_hours}`);
+                    Logger.log(`[save_booking_config] Match Found at Row ${foundIndex + 1}. Updating Alias: ${data.alias}, Hours: ${data.available_hours}, OffDays: ${data.off_days}`);
                     if (data.alias) licSheet.getRange(foundIndex + 1, colAlias + 1).setValue(data.alias);
                     licSheet.getRange(foundIndex + 1, colHours + 1).setValue(data.available_hours || '');
+                    if (colOffDays !== -1) {
+                        licSheet.getRange(foundIndex + 1, colOffDays + 1).setValue(data.off_days || '');
+                    }
                     return createJSONOutput({ status: 'success', message: 'Update berhasil di baris ' + (foundIndex + 1) });
                 }
                 
                 return createJSONOutput({ status: 'error', message: 'Sheet ID atau Alias tidak ditemukan di Master.', debug: 'Searched for ID: ' + targetId + ' | Alias: ' + targetAlias });
             }
 
-            // ACTION: LOG RESET (OTP)
+            // ACTION: LOG RESET (OTP REQUEST)
             if (data.action === 'log_reset') {
                 const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
                 let logSheet = ssMaster.getSheetByName("Reset_Logs");
                 if (!logSheet) {
                     logSheet = ssMaster.insertSheet("Reset_Logs");
-                    logSheet.appendRow(['Timestamp', 'Clinic Name', 'OTP Code', 'Device Info', 'Sheet ID']);
+                    logSheet.appendRow(['Timestamp', 'Clinic Name', 'OTP Code', 'Status', 'Device Info', 'Sheet ID']);
+                    logSheet.getRange(1, 1, 1, 6).setFontWeight("bold").setBackground("#fee2e2");
                 }
-                logSheet.appendRow([new Date(), data.clinic_name || "Unknown", "'" + (data.code || ""), data.deviceInfo || 'Unknown', TARGET_SHEET_ID]);
+                logSheet.appendRow([new Date(), data.clinic_name || "Unknown", "'" + (data.code || ""), "REQUESTED", data.deviceInfo || 'Unknown', data.sheet_id || ""]);
+                return createJSONOutput({ status: "success" });
+            }
+
+            // ACTION: CONFIRM RESET (OTP VERIFIED)
+            if (data.action === 'confirm_reset') {
+                const ssMaster = SpreadsheetApp.getActiveSpreadsheet();
+                let logSheet = ssMaster.getSheetByName("Reset_Logs");
+                if (logSheet) {
+                    logSheet.appendRow([new Date(), data.clinic_name || "Verified", "'" + (data.code || ""), "CONFIRMED/SUCCESS", "Browser Verified", data.sheet_id || ""]);
+                }
                 return createJSONOutput({ status: "success" });
             }
 
@@ -456,62 +493,171 @@ function getSidebarHtml() {
     <html>
       <head>
         <base target="_top">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-          body { font-family: 'Inter', sans-serif; padding: 15px; color: #333; }
-          h3 { margin-top: 0; color: #2563eb; }
-          .form-group { margin-bottom: 15px; }
-          label { display: block; font-size: 12px; margin-bottom: 5px; font-weight: bold; color: #64748b; }
-          input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
-          button { background: #2563eb; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; }
-          button:hover { background: #1d4ed8; }
-          #result { margin-top: 20px; padding: 15px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; display: none; }
-          .key-display { font-family: monospace; font-size: 18px; font-weight: bold; text-align: center; margin: 10px 0; color: #1e3a8a; letter-spacing: 2px; }
+          body { font-family: 'Inter', sans-serif; padding: 10px; color: #333; background: #f8fafc; }
+          .tabs { display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 15px; }
+          .tab { padding: 10px 15px; cursor: pointer; font-size: 13px; font-weight: 500; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+          .tab.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+          .content { display: none; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+          .content.active { display: block; }
+          h3 { margin-top: 0; color: #1e293b; font-size: 16px; margin-bottom: 15px; }
+          .form-group { margin-bottom: 12px; }
+          label { display: block; font-size: 11px; margin-bottom: 4px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+          input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
+          button { background: #2563eb; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+          button:disabled { background: #94a3b8; cursor: not-allowed; }
+          button:hover:not(:disabled) { background: #1d4ed8; }
+          #result { margin-top: 15px; padding: 12px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; display: none; animation: slideIn 0.3s ease-out; }
+          @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+          .key-display { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; text-align: center; margin: 8px 0; color: #1e3a8a; letter-spacing: 1px; background: #fff; padding: 5px; border-radius: 4px; border: 1px dashed #2563eb; }
         </style>
       </head>
       <body>
-        <h3>🔑 License Generator</h3>
-        <div class="form-group">
-          <label>Nama Klien / Klinik</label>
-          <input type="text" id="client" placeholder="Contoh: Klinik Sehat">
+        <div class="tabs">
+          <div id="tab-new" class="tab active" onclick="showTab('new')">🆕 New</div>
+          <div id="tab-renew" class="tab" onclick="showTab('renew')">🔄 Renew</div>
         </div>
-        <div class="form-group">
-          <label>Durasi Paket</label>
-          <select id="duration">
-            <option value="5mins">Trial 5 Menit (Cepat)</option>
-            <option value="1hour">Trial 1 Jam (Test)</option>
-            <option value="7days">Trial 7 Hari</option>
-            <option value="30days">Bulanan (30 Hari)</option>
-            <option value="3months">Triwulan (3 Bulan)</option>
-            <option value="1year">Tahunan (1 Tahun)</option>
-            <option value="lifetime">Lifetime (Selamanya)</option>
-          </select>
+
+        <!-- NEW LICENSE TAB -->
+        <div id="content-new" class="content active">
+          <h3>🔑 Pendaftaran Baru</h3>
+          <div class="form-group">
+            <label>Nama Klien / Klinik</label>
+            <input type="text" id="client" placeholder="Contoh: Klinik Sehat">
+          </div>
+          <div class="form-group" style="display: flex; gap: 8px;">
+            <div style="flex: 1;">
+              <label>No. WA</label>
+              <input type="text" id="whatsapp" placeholder="0812...">
+            </div>
+            <div style="flex: 1;">
+              <label>Email</label>
+              <input type="email" id="email" placeholder="klien@mail.com">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Durasi Paket</label>
+            <select id="duration">
+              <option value="5mins">Trial 5 Menit (Cepat)</option>
+              <option value="1hour">Trial 1 Jam (Test)</option>
+              <option value="7days">Trial 7 Hari</option>
+              <option value="30days">Bulanan (30 Hari)</option>
+              <option value="3months">Triwulan (3 Bulan)</option>
+              <option value="1year">Tahunan (1 Tahun)</option>
+              <option value="lifetime">Lifetime (Selamanya)</option>
+            </select>
+          </div>
+          <button id="btn-new" onclick="generate()">Generate New License</button>
         </div>
-        <button onclick="generate()">Generate Code</button>
+
+        <!-- RENEW LICENSE TAB -->
+        <div id="content-renew" class="content">
+          <h3>🔄 Perpanjang Lisensi</h3>
+          <div class="form-group">
+            <label>Pilih Klinik</label>
+            <select id="client-renew">
+              <option value="">-- Memuat Data... --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Durasi Baru</label>
+            <select id="duration-renew">
+              <option value="30days">Bulanan (30 Hari)</option>
+              <option value="3months">Triwulan (3 Bulan)</option>
+              <option value="1year">Tahunan (1 Tahun)</option>
+              <option value="lifetime">Lifetime (Selamanya)</option>
+              <option value="7days">Trial 7 Hari</option>
+            </select>
+          </div>
+          <button id="btn-renew" onclick="renew()">Update & Renew License</button>
+        </div>
         
         <div id="result">
-          <div style="font-size:11px; text-align:center; color:#64748b; margin-bottom:5px;">LICENSE KEY:</div>
+          <div style="font-size:10px; text-align:center; color:#64748b; margin-bottom:4px;">KODE LISENSI:</div>
           <div id="key-out" class="key-display">...</div>
-          <div style="font-size:11px; color:#64748b;">Plan: <b id="plan-out">-</b></div>
-          <div style="font-size:11px; color:#64748b;">Expired: <b id="exp-out">-</b></div>
-          <div style="font-size:10px; color:#94a3b8; margin-top:10px; text-align:center;">Copy kode diatas dan berikan ke klien.</div>
+          <div style="font-size:11px; color:#64748b; display: flex; justify-content: space-between;">
+            <span>Plan: <b id="plan-out">-</b></span>
+            <span>Expired: <b id="exp-out">-</b></span>
+          </div>
+          <div id="status-out" style="font-size:10px; color:#059669; font-weight:bold; margin-top:8px; text-align:center; background:#ecfdf5; padding:4px; border-radius:4px; display:none;">
+             ✨ Berhasil Diperbarui!
+          </div>
         </div>
 
         <script>
+          function showTab(type) {
+            // Remove active from all
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            
+            // Set active
+            document.getElementById('tab-' + type).classList.add('active');
+            document.getElementById('content-' + type).classList.add('active');
+            
+            if (type === 'renew') loadClients();
+          }
+
+          function loadClients() {
+            const select = document.getElementById('client-renew');
+            select.innerHTML = '<option value="">-- Memuat... --</option>';
+            
+            google.script.run
+              .withFailureHandler(onFail)
+              .withSuccessHandler(function(clients) {
+                select.innerHTML = '<option value="">-- Pilih Klinik --</option>';
+                if (!clients || clients.length === 0) {
+                   select.innerHTML = '<option value="">-- Tidak ada data --</option>';
+                   return;
+                }
+                clients.forEach(c => {
+                  const opt = document.createElement('option');
+                  opt.value = opt.text = c;
+                  select.add(opt);
+                });
+              })
+              .getExistingClients();
+          }
+
           function generate() {
             const client = document.getElementById('client').value;
-             const duration = document.getElementById('duration').value;
-            const btn = document.querySelector('button');
+            const whatsapp = document.getElementById('whatsapp').value;
+            const email = document.getElementById('email').value;
+            const duration = document.getElementById('duration').value;
+            const btn = document.getElementById('btn-new');
             
             if(!client) { alert("Nama Klien wajib diisi!"); return; }
             
-            btn.innerText = "Memproses...";
+            btn.innerText = "Processing...";
             btn.disabled = true;
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('status-out').style.display = 'none';
             
             google.script.run
               .withSuccessHandler(onSuccess)
               .withFailureHandler(onFail)
-              .generateNewLicense(client, duration);
+              .generateNewLicense(client, duration, email, whatsapp);
+          }
+
+          function renew() {
+            const client = document.getElementById('client-renew').value;
+            const duration = document.getElementById('duration-renew').value;
+            const btn = document.getElementById('btn-renew');
+            
+            if(!client) { alert("Pilih Klinik terlebih dahulu!"); return; }
+            
+            btn.innerText = "Renewing...";
+            btn.disabled = true;
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('status-out').style.display = 'none';
+            
+            google.script.run
+              .withSuccessHandler(function(res) {
+                onSuccess(res);
+                document.getElementById('status-out').style.display = 'block';
+              })
+              .withFailureHandler(onFail)
+              .renewLicense(client, duration);
           }
           
           function onSuccess(res) {
@@ -519,14 +665,21 @@ function getSidebarHtml() {
             document.getElementById('key-out').innerText = res.key;
             document.getElementById('plan-out').innerText = res.plan;
             document.getElementById('exp-out').innerText = res.expiry;
-            document.querySelector('button').innerText = "Generate Code";
-            document.querySelector('button').disabled = false;
+            
+            document.querySelectorAll('button').forEach(b => {
+               b.disabled = false;
+               if(b.id === 'btn-new') b.innerText = "Generate New License";
+               if(b.id === 'btn-renew') b.innerText = "Update & Renew License";
+            });
           }
           
           function onFail(err) {
-            alert("Error: " + err);
-            document.querySelector('button').innerText = "Generate Code";
-            document.querySelector('button').disabled = false;
+            alert("Error Server: " + err);
+            document.querySelectorAll('button').forEach(b => {
+               b.disabled = false;
+               if(b.id === 'btn-new') b.innerText = "Generate New License";
+               if(b.id === 'btn-renew') b.innerText = "Update & Renew License";
+            });
           }
         </script>
       </body>
