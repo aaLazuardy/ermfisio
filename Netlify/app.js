@@ -3256,7 +3256,7 @@ function renderConfigView(container) {
                                 </div>
                                 <div class="relative pl-6">
                                     <div class="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-sky-200 text-sky-700 flex items-center justify-center text-[10px] font-bold">2</div>
-                                    <p class="text-[11px] text-slate-600 font-medium">Pastikan Bot Aktif. Japri <a href="https://t.me/asistenfisiobot" target="_blank" class="text-sky-600 font-bold hover:underline">@asistenfisiobot</a> & klik <strong>START</strong> (atau undang ke grup Anda).</p>
+                                    <p class="text-[11px] text-slate-600 font-medium">Pastikan Bot Aktif. Japri <a href="https://t.me/FisiotaReminder_bot" target="_blank" class="text-sky-600 font-bold hover:underline">@FisiotaReminder_bot</a> & klik <strong>START</strong> (atau undang ke grup Anda).</p>
                                 </div>
                                 <div class="relative pl-6">
                                     <div class="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-sky-200 text-sky-700 flex items-center justify-center text-[10px] font-bold">3</div>
