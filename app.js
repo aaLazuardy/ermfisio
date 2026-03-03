@@ -3245,19 +3245,41 @@ function renderConfigView(container) {
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div class="space-y-4">
-                        <div class="bg-sky-50 p-4 rounded-xl border border-sky-100">
-                            <h4 class="font-bold text-sky-800 flex items-center gap-2 mb-3"><i data-lucide="send" width="16"></i> Setup Telegram</h4>
-                            <div class="mb-3">
-                                <p class="text-[11px] text-slate-600 mb-2">1. Pastikan Bot Aktif (Pilih A atau B):<br>
-                                A. <strong>Japri (DM)</strong> Bot & klik START.<br>
-                                B. <strong>Undang</strong> Bot ke Grup Klinik Anda.<br>
-                                <span class="bg-sky-100 text-sky-700 font-mono px-1 rounded select-all text-[10px]">@asistenfisiobot</span> (Contoh)</p>
-                                <p class="text-[11px] text-slate-600">2. Masukkan Chat ID (User ID / Group ID):</p>
+                        <div class="bg-sky-50 p-5 rounded-xl border border-sky-100">
+                            <h4 class="font-bold text-sky-800 flex items-center gap-2 mb-4">
+                                <i data-lucide="info" width="18" class="text-sky-600"></i> Tutorial Setup Telegram
+                            </h4>
+                            <div class="space-y-4 mb-6">
+                                <div class="relative pl-6">
+                                    <div class="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-sky-200 text-sky-700 flex items-center justify-center text-[10px] font-bold">1</div>
+                                    <p class="text-[11px] text-slate-600 font-medium">Buka <a href="https://t.me/userinfobot" target="_blank" class="text-sky-600 font-bold hover:underline">@userinfobot</a> di Telegram, klik <strong>START</strong>, lalu copy <strong>ID</strong> Anda.</p>
+                                </div>
+                                <div class="relative pl-6">
+                                    <div class="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-sky-200 text-sky-700 flex items-center justify-center text-[10px] font-bold">2</div>
+                                    <p class="text-[11px] text-slate-600 font-medium">Pastikan Bot Aktif. Japri <a href="https://t.me/asistenfisiobot" target="_blank" class="text-sky-600 font-bold hover:underline">@asistenfisiobot</a> & klik <strong>START</strong> (atau undang ke grup Anda).</p>
+                                </div>
+                                <div class="relative pl-6">
+                                    <div class="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-sky-200 text-sky-700 flex items-center justify-center text-[10px] font-bold">3</div>
+                                    <p class="text-[11px] text-slate-600 font-medium">Masukkan ID tadi ke kolom <strong>Chat ID</strong> di bawah ini.</p>
+                                </div>
+                                <div class="relative pl-6">
+                                    <div class="absolute left-0 top-0.5 w-4 h-4 border border-sky-300 text-sky-500 flex items-center justify-center text-[10px] font-bold rounded-full italic">?</div>
+                                    <p class="text-[10px] text-slate-500 italic">Ingin pakai Bot sendiri? Buat di <a href="https://t.me/botfather" target="_blank" class="text-sky-600 font-bold hover:underline">@BotFather</a> dan masukkan Token-nya.</p>
+                                </div>
                             </div>
-                            <div class="space-y-3">
-                                <div><label class="text-xs font-bold text-slate-500 uppercase block mb-1">Chat ID (Wajib)</label><input type="text" id="notif-tg-chatid" value="${state.notificationConfig?.telegramChatId || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm font-mono" placeholder="-100xxxxxxx"></div>
-                                <div><label class="text-xs font-bold text-slate-400 uppercase block mb-1">Bot Token (Opsional)</label><input type="text" id="notif-tg-token" value="${state.notificationConfig?.telegramToken || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs font-mono text-slate-400" placeholder="Kosongkan jika pakai Bot Pusat"></div>
-                                <button onclick="testTelegramConnection()" id="btn-test-tg" class="w-full bg-sky-100 text-sky-700 py-2 rounded-lg text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-2 border border-sky-200 transition-all"><i data-lucide="send" width="14"></i> Tes Kirim Telegram</button>
+
+                            <div class="space-y-3 pt-3 border-t border-sky-100">
+                                <div>
+                                    <label class="text-xs font-bold text-slate-500 uppercase block mb-1">Chat ID (Wajib)</label>
+                                    <input type="text" id="notif-tg-chatid" value="${state.notificationConfig?.telegramChatId || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-sm font-mono shadow-sm bg-white" placeholder="-100xxxxxxx">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-slate-400 uppercase block mb-1">Bot Token (Opsional)</label>
+                                    <input type="text" id="notif-tg-token" value="${state.notificationConfig?.telegramToken || ''}" class="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs font-mono text-slate-400 bg-white" placeholder="Kosongkan jika pakai Bot Pusat">
+                                </div>
+                                <button onclick="testTelegramConnection()" id="btn-test-tg" class="w-full bg-sky-100 text-sky-700 py-2.5 rounded-lg text-xs font-bold hover:bg-sky-200 flex items-center justify-center gap-2 border border-sky-200 shadow-sm transition-all">
+                                    <i data-lucide="send" width="14"></i> Tes Kirim Telegram
+                                </button>
                             </div>
                         </div>
                     </div>
