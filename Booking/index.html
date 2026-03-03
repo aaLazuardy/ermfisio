@@ -309,8 +309,15 @@
                             <button type="button" class="time-chip" onclick="selectTime(this, '${h}')">${h}</button>
                         `).join('');
                     }
+                } else if (result.status === 'closed') {
+                    container.innerHTML = `
+                        <div class="w-full bg-amber-50 p-5 rounded-2xl border border-amber-100 text-center flex flex-col items-center gap-2">
+                            <i data-lucide="calendar-x" width="24" class="text-amber-600"></i>
+                            <p class="text-sm text-amber-800 font-black">KLINIK LIBUR</p>
+                            <p class="text-[11px] text-amber-600 leading-tight">${result.message || 'Maaf, hari ini klinik tutup rutin.'}</p>
+                        </div>`;
                 } else {
-                    container.innerHTML = `<p class="text-xs text-red-500 p-2">${result.message || 'Gagal memuat jam.'}</p>`;
+                    container.innerHTML = `<p class="text-xs text-red-500 p-2 font-bold">${result.message || 'Gagal memuat jam.'}</p>`;
                 }
             } catch (err) {
                 console.error("Slots Error:", err);

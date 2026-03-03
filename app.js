@@ -61,7 +61,8 @@ let state = {
     },
     bookingConfig: {
         alias: '',
-        availableHours: ''
+        availableHours: '',
+        offDays: ''
     },
     deletedIds: {
         patients: [],
@@ -3101,6 +3102,21 @@ function renderConfigView(container) {
                             </div>
                         </div>
 
+                        <div class="mt-4 pt-4 border-t border-slate-100">
+                            <label class="text-xs font-bold text-slate-500 uppercase block mb-3">Hari Libur Rutin (Tutup Selamanya)</label>
+                            <div class="flex flex-wrap gap-3">
+                                ${['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map((day, dIdx) => {
+        const offDays = state.bookingConfig.offDays || '';
+        const checked = offDays.split(',').includes(dIdx.toString()) ? 'checked' : '';
+        return `<label class="flex items-center gap-2 text-xs cursor-pointer bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-200 transition-all">
+                                        <input type="checkbox" value="${dIdx}" ${checked} class="booking-off-day-check w-4 h-4 accent-red-500">
+                                        <span class="font-bold text-slate-700">${day}</span>
+                                    </label>`;
+    }).join('')}
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-2 italic">*Jika dicentang, hari tersebut akan otomatis "Tutup" di halaman booking.</p>
+                        </div>
+
                         <button onclick="saveBookingConfig()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg btn-press flex items-center justify-center gap-2">
                             <i data-lucide="save" width="16"></i> Simpan & Generate Link
                         </button>
@@ -3495,9 +3511,12 @@ async function saveBookingConfig() {
     const hours = [...document.querySelectorAll('.booking-hour-check:checked')].map(el => el.value);
     if (hours.length === 0) { alert('⚠️ Pilih minimal 1 jam tersedia!'); return; }
 
+    const offDays = [...document.querySelectorAll('.booking-off-day-check:checked')].map(el => el.value);
+
     // Update State
     state.bookingConfig.alias = alias;
     state.bookingConfig.availableHours = hours.join(',');
+    state.bookingConfig.offDays = offDays.join(',');
 
     // Sync UI
     updateBookingLinkPreview();
@@ -3528,7 +3547,8 @@ async function saveBookingConfig() {
                     action: 'save_booking_config',
                     sheet_id: sheetId,
                     alias: alias,
-                    available_hours: state.bookingConfig.availableHours
+                    available_hours: state.bookingConfig.availableHours,
+                    off_days: state.bookingConfig.offDays
                 })
             });
 
